@@ -1,6 +1,7 @@
 (function () {
   const $ = (id) => document.getElementById(id);
   const courseQuery = () => {const id=new URLSearchParams(location.search).get('course');return id?'?course='+encodeURIComponent(id):'';};
+  const monitorQuery = () => {const p=new URLSearchParams(location.search),q=new URLSearchParams();for(const k of ['course','exam'])if(p.get(k))q.set(k,p.get(k));return q.size?'?'+q:'';};
   const shell = document.querySelector(".admin-shell");
   const escape = (value) => window.cssEscape(String(value ?? ""));
   const show = (id, message, error) => {
@@ -17,8 +18,16 @@
 
   let monitorRows = [];
   let monitorServerAt = Date.now();
+  let monitorExam = null;
   async function loadMonitor() {
-    const data = await window.cssRequest("/api/admin/monitor"+courseQuery());
+    const data = await window.cssRequest("/api/admin/monitor"+monitorQuery());
+    monitorExam = data.exam;
+    if($('monitor-submission-heading'))$('monitor-submission-heading').textContent=monitorExam?.type==='programming'?'Bài đã AC / Tổng bài':'Nộp bài';
+    window.submissionDeadlines.sync(data.occurred_at);
+    if($('monitor-exam-context')){
+      const e=monitorExam;
+      $('monitor-exam-context').innerHTML=e?`<h2>${escape(e.title)}</h2><p class="muted">${e.type==='programming'?'Thi lập trình':'Thi nộp file'} · ${e.waiting?'Chờ đến giờ bắt đầu':e.live?'Đang diễn ra':'Chưa mở hoặc đã kết thúc'}${e.started_at?' · Bắt đầu '+escape(new Date(e.started_at).toLocaleString('vi-VN',{timeZone:'Asia/Ho_Chi_Minh'})):''}${e.ends_at?' · Kết thúc '+escape(new Date(e.ends_at).toLocaleString('vi-VN',{timeZone:'Asia/Ho_Chi_Minh'})):''}</p>${e.waiting?window.submissionDeadlines.waiting(e.started_at):''}<a class="btn btn-secondary" href="/admin?section=exam&exam=${encodeURIComponent(e.id)}${e.course_id?'&course='+encodeURIComponent(e.course_id):''}">Cấu hình / Điều chỉnh thời gian thi</a>`:'<p class="muted">Tổng quan sinh viên. Chọn kỳ thi phía trên để giám sát riêng danh sách dự thi và bài nộp của kỳ thi đó.</p>';
+    }
     monitorRows = data.students || [];
     monitorServerAt = Date.parse(data.occurred_at) || Date.now();
     if ($("stat-total")) $("stat-total").textContent = monitorRows.length;
@@ -31,6 +40,12 @@
     if ($("monitor-stat-attention")) $("monitor-stat-attention").textContent=data.abnormal_count??0;
     if ($("monitor-updated")) $("monitor-updated").textContent = "Đồng bộ server " + new Date(monitorServerAt).toLocaleTimeString();
     renderMonitor();
+  }
+  function monitorActions(row){
+    const query=new URLSearchParams({section:'submissions',student:row.student_id}),course=new URLSearchParams(location.search).get('course');
+    if(course)query.set('course',course);
+    if(monitorExam){if(monitorExam.type==='programming')query.set('exam',monitorExam.id);else query.set('activity',monitorExam.activity_id);}
+    return `<a class="btn btn-secondary btn-small" data-monitor-archive href="/admin?${escape(query.toString())}">Xem bài nộp</a> ${!monitorExam||row.can_force?`<button class="btn btn-secondary btn-small" data-force="${escape(row.student_id)}">Ép nộp</button>`:''} ${!monitorExam||row.can_adjust?`<button class="btn btn-secondary btn-small" data-adjust="${escape(row.student_id)}">Điều chỉnh giờ</button>`:''}`;
   }
   function renderParticipants() {
     const box = $("participant-list");
@@ -50,7 +65,7 @@
     body.innerHTML = rows.map((row) => {
       const alerts = (row.alerts || []).map((alert) => `<span class="status-pill status-red">${labels[alert] || escape(alert)}</span>`).join("");
       const remaining = row.remaining_seconds == null ? "—" : `${Math.floor(row.remaining_seconds / 60)}:${String(row.remaining_seconds % 60).padStart(2, "0")}`;
-      return `<tr class="${alerts ? "row-warning" : ""}"><td><div class="cell-main">${escape(row.student_id)}</div><div class="cell-sub">${escape(row.full_name)}</div></td><td class="code-text">${escape(row.ip || "—")}</td><td>${row.logged_in ? '<span class="status-pill status-green">Đang đăng nhập</span>' : '<span class="status-pill status-gray">Ngoại tuyến / chưa đăng nhập</span>'}<div class="cell-sub">${escape(row.last_seen || "")}</div></td><td>${escape(row.exam_file || "—")}</td><td>${remaining}</td><td>${row.submission_count || 0} lần</td><td><div class="user-agent">${escape(row.user_agent || "—")}</div></td><td>${alerts || '<span class="muted">Bình thường</span>'}</td><td><a class="btn btn-secondary btn-small" data-monitor-archive href="/admin?section=submissions&student=${encodeURIComponent(row.student_id)}${new URLSearchParams(location.search).get('course')?'&course='+encodeURIComponent(new URLSearchParams(location.search).get('course')):''}">Xem bài nộp</a> <button class="btn btn-secondary btn-small" data-force="${escape(row.student_id)}">Ép nộp</button> <button class="btn btn-secondary btn-small" data-adjust="${escape(row.student_id)}">Điều chỉnh giờ</button></td></tr>`;
+      return `<tr class="${alerts ? "row-warning" : ""}"><td><div class="cell-main">${escape(row.student_id)}</div><div class="cell-sub">${escape(row.full_name)}</div></td><td class="code-text">${escape(row.ip || "—")}</td><td>${row.logged_in ? '<span class="status-pill status-green">Đang đăng nhập</span>' : '<span class="status-pill status-gray">Ngoại tuyến / chưa đăng nhập</span>'}<div class="cell-sub">${escape(row.last_seen || "")}</div></td><td>${escape(row.exam_file || "—")}</td><td>${remaining}</td><td>${monitorExam?.type==='programming'?`<strong data-monitor-accepted="${escape(row.student_id)}">${row.accepted_problems}/${row.total_problems} bài</strong>`:`${row.submission_count || 0} lần`}${row.latest_verdict?`<div class="cell-sub">${escape(row.latest_verdict)}</div>`:''}</td><td><div class="user-agent">${escape(row.user_agent || "—")}</div></td><td>${alerts || '<span class="muted">Bình thường</span>'}</td><td>${monitorActions(row)}</td></tr>`;
     }).join("") || '<tr><td colspan="9" class="empty-cell">Không có dữ liệu.</td></tr>';
   }
 
@@ -262,8 +277,8 @@
   $("monitor-body")?.addEventListener("click", async (event) => {
     const force = event.target.closest("[data-force]"); const adjust = event.target.closest("[data-adjust]");
     try {
-      if (force && window.confirm(`Ép ${force.dataset.force} nộp bài ngay?`)) await window.cssRequest(`/api/admin/students/${encodeURIComponent(force.dataset.force)}/force-submit`+courseQuery(), { method: "POST" });
-      if (adjust) { const minutes = window.prompt("Nhập số phút cộng/trừ:", "-5"); if (minutes !== null) { const form = new FormData(); form.set("minutes", minutes); await window.cssRequest(`/api/admin/students/${encodeURIComponent(adjust.dataset.adjust)}/adjust-time`+courseQuery(), { method: "POST", body: form }); } }
+      if (force && window.confirm(`Ép ${force.dataset.force} nộp bài ngay?`)) await window.cssRequest(`/api/admin/students/${encodeURIComponent(force.dataset.force)}/force-submit`+monitorQuery(), { method: "POST" });
+      if (adjust) { const minutes = window.prompt("Nhập số phút cộng/trừ:", "-5"); if (minutes !== null) { const form = new FormData(); form.set("minutes", minutes); await window.cssRequest(`/api/admin/students/${encodeURIComponent(adjust.dataset.adjust)}/adjust-time`+monitorQuery(), { method: "POST", body: form }); } }
       if (force || adjust) { await loadMonitor(); window.cssToast("Đã cập nhật.", "success"); }
     } catch (error) { toastError(error); }
   });

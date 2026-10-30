@@ -16,6 +16,12 @@
   function context(){
     const node=$('admin-course-context');if(!node)return;
     node.innerHTML=`<form id="admin-scope-form"><label for="admin-course-picker"><i class="fa fa-book"></i> Khóa học</label><select id="admin-course-picker" name="course"><option value="">Tất cả khóa học</option>${data.courses.map(c=>`<option value="${c.id}" ${scope===c.id?'selected':''}>${esc(c.name)} · ${esc(c.code)}</option>`).join('')}</select></form><a class="bridge-text-link" href="${scope?courseUrl(scope):'/admin/courses'}">${scope?'Mở không gian khóa học':'Xem danh sách khóa học'} <i class="fa fa-arrow-right"></i></a>`;
+    if(section==='monitor'){
+      const exams=data.exams.filter(e=>!scope||e.course_id===scope),selected=params.get('exam')||'';
+      const label=document.createElement('label');label.className='monitor-exam-picker';label.innerHTML=`Kỳ thi<select id="admin-monitor-exam"><option value="">Tổng quan sinh viên</option>${exams.map(e=>`<option value="${esc(e.id)}" ${e.id===selected?'selected':''}>${esc(e.title)} · ${e.type==='programming'?'Code':'File'}</option>`).join('')}</select>`;
+      node.querySelector('form').append(label);
+      $('admin-monitor-exam').addEventListener('change',event=>{const e=exams.find(e=>e.id===event.target.value);location.assign(pageUrl('monitor',e?.course_id||scope,e?'&exam='+encodeURIComponent(e.id):''));});
+    }
     $('admin-course-picker').addEventListener('change',e=>location.assign(pageUrl(section,e.target.value)));
     $('admin-scope-form').addEventListener('submit',e=>{e.preventDefault();location.assign(pageUrl(section,$('admin-course-picker').value));});
     document.querySelectorAll('.sidebar-nav a').forEach(a=>{const url=new URL(a.href);if(url.pathname==='/admin'&&['monitor','exam','submissions'].includes(url.searchParams.get('section'))&&scope){url.searchParams.set('course',scope);a.href=url.pathname+url.search;}if(url.pathname==='/admin/courses'&&scope)a.href=courseUrl(scope);});
@@ -32,22 +38,35 @@
   }
   function examOverview(){window.examConfig.render(data);}
   function submissions(){window.submissionArchive.mount(data);}
-  async function load(){try{data=await window.cssRequest('/api/admin/workspace'+(scope?'?course='+encodeURIComponent(scope):''));context();if($('admin-course-count'))$('admin-course-count').textContent=data.courses.length;if($('live-status'))$('live-status').textContent='Đã kết nối';if(section==='dashboard')dashboard();if(section==='exam')examOverview();if(section==='submissions')submissions();$('admin-workspace-error').classList.add('hidden');}catch(error){$('admin-workspace-error').textContent=error.message;$('admin-workspace-error').classList.remove('hidden');}}
+  async function load(){try{data=await window.cssRequest('/api/admin/workspace'+(scope?'?course='+encodeURIComponent(scope):''));window.submissionDeadlines.sync(data.server_time);context();if($('admin-course-count'))$('admin-course-count').textContent=data.courses.length;if($('live-status'))$('live-status').textContent='Đã kết nối';if(section==='dashboard')dashboard();if(section==='exam')examOverview();if(section==='submissions')submissions();$('admin-workspace-error').classList.add('hidden');}catch(error){$('admin-workspace-error').textContent=error.message;$('admin-workspace-error').classList.remove('hidden');}}
   load();
   let deadlinePolling=false;
-  setInterval(async()=>{
+  async function pollDeadlines(){
     if(deadlinePolling||document.hidden||!data||!['exam','dashboard'].includes(section))return;
     deadlinePolling=true;
     try{
       const next=await window.cssRequest('/api/admin/workspace'+(scope?'?course='+encodeURIComponent(scope):''));
       window.submissionDeadlines.sync(next.server_time);
       if(section==='exam'){
-        const id=params.get('exam'),before=data.exams.filter(e=>!id||e.id===id).map(e=>[e.id,e.state,e.ends_at]),after=next.exams.filter(e=>!id||e.id===id).map(e=>[e.id,e.state,e.ends_at]);
-        if(JSON.stringify(before)!==JSON.stringify(after))window.examConfig.render(next);
+        const id=params.get('exam'),times=d=>d.exams.filter(e=>!id||e.id===id).map(e=>[e.id,e.state,e.waiting,e.started_at,e.ends_at]),before=times(data),after=times(next);
+        if(JSON.stringify(before)!==JSON.stringify(after)){
+          // Keep an unfinished timing/configuration draft while refreshing its clock.
+          if(window.adminDrafts?.dirty()){
+            document.querySelectorAll('[data-exam-card], [data-exam-clock]').forEach(node=>{
+              const e=next.exams.find(e=>e.id===(node.dataset.examCard||node.dataset.examClock));
+              const clock=node.querySelector('.exam-wait-clock');
+              if(clock&&e){if(e.waiting){clock.dataset.examOpensAt=e.started_at;delete clock.dataset.openingHandled;clock.querySelector('[data-deadline-countdown]').dataset.expiresAt=e.started_at;}else clock.remove();}
+            });
+            return;
+          }
+          window.examConfig.render(next);
+        }
       }else{
         const running=document.querySelector('.bridge-statistics .stat-card:last-child strong');if(running)running.textContent=next.stats.running_exams;
       }
       data=next;
     }catch(_){}finally{deadlinePolling=false;}
-  },5000);
+  }
+  document.addEventListener('exam-window-opened',pollDeadlines);
+  setInterval(pollDeadlines,5000);
 })();

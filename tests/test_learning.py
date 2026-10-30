@@ -863,6 +863,72 @@ class LearningTests(unittest.TestCase):
         self.assertEqual(self.request("/api/admin/students/s2/force-submit?course="+c1, form={})[0], 403)
         self.assertEqual(self.request("/api/admin/workspace", "s1")[0], 403)
 
+    def test_exam_monitor_isolates_code_roster_attempts_and_unique_ac_problems(self):
+        course = self.course("s1,s2")
+        fields = {"type": "programming", "course_id": course, "title": "Code monitor", "languages": "python",
+                  "problems": json.dumps([{"title": name, "points": 10, "tests": [{"input": "", "output": "3"}]} for name in ("A", "B")])}
+        first = self.request("/api/admin/exam-configurations/save", form=fields)[1]["id"]
+        second = self.request("/api/admin/exam-configurations/save", form={**fields, "title": "Other code"})[1]["id"]
+        for eid in (first, second):
+            self.assertEqual(self.request("/api/admin/programming/participants", form={"exam_id": eid, "student_ids": "s1"})[0], 200)
+        with patch.object(code_runner, "ready", return_value=True), patch.object(programming, "schedule"):
+            for eid in (first, second):
+                self.assertEqual(self.request("/api/admin/programming/control", form={"exam_id": eid, "action": "start"})[0], 200)
+                self.assertEqual(self.request("/api/student/programming/start", "s1", {"exam_id": eid})[0], 200)
+            for eid, index in ((first, 0), (first, 0), (first, 1), (second, 1)):
+                code, response = self.request("/api/student/programming/submit", "s1", {"exam_id": eid, "problem_index": str(index), "language": "python"}, file=("answer.py", b"print(3)"))
+                self.assertEqual(code, 200, response)
+                submitted = programming.rows()
+                submitted[-1]["state"] = "done"
+                storage.write_json("programming_submissions.json", submitted)
+        records = programming.rows()
+        for row in records:
+            ac = row["exam_id"] == second or row["problem_index"] == 0
+            row.update(state="done", result={"verdict": "AC" if ac else "WA", "score": 10 if ac else 0, "tests": []})
+        # A failed rejudge preserves the previous effective AC; duplicates count once.
+        records[0]["grading_history"] = [{"result": records[0]["result"]}]
+        records[0]["result"] = {"verdict": "SYSTEM_ERROR", "score": None, "tests": []}
+        storage.write_json("programming_submissions.json", records)
+        code, response = self.request("/api/admin/monitor?exam="+first+"&course="+course)
+        self.assertEqual(code, 200, response)
+        self.assertEqual(response["exam"]["id"], first)
+        self.assertEqual([r["student_id"] for r in response["students"]], ["s1"])
+        row = response["students"][0]
+        self.assertEqual((row["accepted_problems"], row["total_problems"], row["submission_count"]), (1, 2, 3))
+        self.assertFalse(row["can_force"])
+        self.assertFalse(row["can_adjust"])
+        self.assertEqual(row["ends_at"], storage.read_json("programming_attempts.json")[first+":s1"]["ends_at"])
+        self.assertEqual(self.request("/api/admin/monitor?exam="+second)[1]["students"][0]["accepted_problems"], 1)
+        archive = self.request("/api/admin/archive/list?exam="+first+"&student=s1")[1]
+        self.assertEqual(archive["total"], 3, archive)
+        self.assertTrue(all(r["activity_id"].startswith("code:"+first+":") for r in archive["rows"]))
+        self.assertEqual(self.request("/api/admin/monitor?exam="+first, "s1")[0], 403)
+        self.assertEqual(self.request("/api/admin/monitor?exam=missing")[0], 404)
+        self.assertEqual(self.request("/api/admin/monitor?exam="+first+"&course="+self.course("s2"))[0], 403)
+        original = storage.read_json("assignments.json")
+        for action in ("force-submit", "adjust-time"):
+            self.assertEqual(self.request("/api/admin/students/s1/"+action+"?exam="+first, form={"minutes": "5"})[0], 409)
+        self.assertEqual(storage.read_json("assignments.json"), original)
+
+    def test_exam_monitor_file_release_does_not_count_old_or_unrelated_submissions(self):
+        course = self.course("s1,s2")
+        settings = storage.read_json("settings.json")
+        settings.update(exam_catalog_id="current", exam_state="started", exam_started_at=storage.utc_now(), exam_duration_minutes=10,
+                        exam_course_id=course, exam_participants=["s1"], exam_release_id="current-release")
+        storage.write_json("settings.json", settings)
+        storage.write_json("assignments.json", {"s1": {"release_id": "current-release", "course_id": course, "exam_file": "current.txt", "status": "in_progress", "started_at": storage.utc_now(), "ends_at": self.future}})
+        storage.write_json("submissions.json", {"s1": [{"release_id": "old-release", "filename": "old.zip"}, {"release_id": "current-release", "filename": "current.zip"}], "s2": [{"release_id": "current-release", "filename": "other.zip"}]})
+        code, response = self.request("/api/admin/monitor?exam=current")
+        self.assertEqual(code, 200, response)
+        self.assertEqual(len(response["students"]), 1)
+        self.assertEqual(response["students"][0]["submission_count"], 1)
+        self.assertEqual(response["students"][0]["latest_submission"]["filename"], "current.zip")
+        self.assertTrue(response["students"][0]["can_adjust"])
+        self.assertEqual(response["exam"]["activity_id"], "file:current-release")
+        settings.update(exam_release_id="new-release")
+        storage.write_json("settings.json", settings)
+        self.assertEqual(self.request("/api/admin/students/s1/force-submit?exam=current", form={})[0], 409)
+
     def test_exam_course_context_controls_distribution_and_submission(self):
         c1 = self.course("s1")
         c2 = self.course("s2")

@@ -1,4 +1,6 @@
 """Bridge course learning data and the existing file-exam workflow."""
+from datetime import datetime, timezone
+
 from . import learning
 from .storage import read_json, write_json, utc_now, audit
 
@@ -29,6 +31,81 @@ def scope_monitor(rows, course_id):
         row.update({"submission_count": len(own), "latest_submission": own[-1] if own else None})
         result.append(row)
     return result
+
+
+def exam_monitor(rows, exam_id, course_id=""):
+    """Project presence onto one exam; never mix another exam's attempts or files."""
+    from .exam_catalog import listing
+    exam = next((e for e in listing() if e["id"] == exam_id), None)
+    if not exam:
+        raise learning.LearningError(404, "Không tìm thấy kỳ thi cần giám sát.")
+    if course_id and exam.get("course_id") != course_id:
+        raise learning.LearningError(403, "Kỳ thi không thuộc khóa học đang chọn.")
+    now = datetime.now(timezone.utc)
+    end = learning.date_value(exam["ends_at"]) if exam.get("ends_at") else None
+    live = bool(exam["state"] == "started" and not exam.get("waiting") and end and end > now)
+    members = set(exam.get("participants", []))
+    attempts = read_json("programming_attempts.json", {}) if exam["type"] == "programming" else {}
+    code_records = read_json("programming_submissions.json", []) if exam["type"] == "programming" else []
+    code_by_student = {}
+    for record in code_records:
+        if record["exam_id"] == exam_id:
+            code_by_student.setdefault(record["student_id"], []).append(record)
+    problem_count = len(exam.get("programming", {}).get("problems", []))
+    file_records = read_json("submissions.json") if exam["type"] == "file" else {}
+    assignments = read_json("assignments.json") if exam["type"] == "file" else {}
+    result = []
+    for original in rows:
+        sid = original["student_id"]
+        if sid not in members:
+            continue
+        row = dict(original)
+        if exam["type"] == "programming":
+            attempt = attempts.get(exam_id + ":" + sid, {})
+            records = sorted(code_by_student.get(sid, []), key=lambda r: r.get("submitted_at", ""))
+            latest = records[-1] if records else None
+            solved = set()
+            for record in records:
+                grades = [h.get("result") for h in record.get("grading_history", [])] + [record.get("result")]
+                grade = next((g for g in reversed(grades) if g and g.get("score") is not None), None)
+                index = record.get("problem_index")
+                if grade and grade.get("verdict") == "AC" and isinstance(index, int) and 0 <= index < problem_count:
+                    solved.add(index)
+            row.update(exam_file=exam["title"], exam_status="submitted" if records else "in_progress" if attempt else "assigned",
+                       started_at=attempt.get("started_at"), ends_at=attempt.get("ends_at") or exam.get("ends_at"),
+                       latest_verdict=(latest.get("result") or {}).get("verdict") or latest.get("state") if latest else None,
+                       accepted_problems=len(solved), total_problems=problem_count, can_force=False, can_adjust=False)
+        else:
+            attempt = assignments.get(sid, {})
+            if not exam.get("release_id") or attempt.get("release_id") != exam["release_id"]:
+                attempt = {}
+            records = [r for r in file_records.get(sid, []) if exam.get("release_id") and r.get("release_id") == exam["release_id"]]
+            row.update(exam_file=attempt.get("exam_file"), exam_status=attempt.get("status", "not_assigned"),
+                       started_at=attempt.get("started_at"), ends_at=attempt.get("ends_at"), latest_verdict=None,
+                       can_force=live and bool(exam.get("active")) and attempt.get("status") in {"assigned", "in_progress"},
+                       can_adjust=live and bool(exam.get("active")) and bool(attempt.get("ends_at")))
+        row_end = learning.date_value(row["ends_at"]) if row.get("ends_at") else None
+        row.update(submission_count=len(records), latest_submission=records[-1] if records else None,
+                   remaining_seconds=max(0, int((row_end-now).total_seconds())) if row_end and row.get("started_at") else None)
+        if exam["type"] == "programming" and records:
+            # The monitor only needs summary metadata, not every private test output.
+            row["latest_submission"] = {k: records[-1].get(k) for k in ("id", "exam_id", "student_id", "problem_index", "problem_title", "submitted_at", "state")}
+        result.append(row)
+    context = {k: exam.get(k) for k in ("id", "title", "course_id", "type", "state", "waiting", "started_at", "ends_at")}
+    context["live"] = live
+    context["activity_id"] = ("code:" + exam_id) if exam["type"] == "programming" else "file:" + str(exam.get("release_id") or "")
+    return result, context
+
+
+def validate_file_monitor_target(exam_id, student_id):
+    """A stale/code monitor link must never mutate the current file assignment."""
+    if not exam_id:
+        return
+    from .exam_catalog import listing
+    exam = next((e for e in listing() if e["id"] == exam_id), None)
+    assignment = read_json("assignments.json").get(student_id, {})
+    if not exam or exam["type"] != "file" or not exam.get("active") or not exam.get("release_id") or assignment.get("release_id") != exam["release_id"] or student_id not in exam.get("participants", []):
+        raise learning.LearningError(409, "Thao tác không áp dụng cho kỳ thi đang giám sát.")
 
 
 def overview(session, course_id=""):

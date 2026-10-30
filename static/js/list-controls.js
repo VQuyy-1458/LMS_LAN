@@ -12,6 +12,7 @@
   const named=field('title','Tên A–Z',title),when=field('time','Thời gian',time);
   const lifecycle=[['open','Đang mở'],['upcoming','Sắp diễn ra'],['closed','Đã đóng']];
   function life(r){
+    if(r.waiting)return 'upcoming';
     if(r.state)return ['started','distributed'].includes(r.state)?(r.state==='started'?'open':'upcoming'):['ended','closed','expired','completed'].includes(r.state)?'closed':'upcoming';
     if(r.status==='completed'||r.closed||r.closed_at)return 'closed';
     if(r.open!==undefined)return r.open?'open':'closed';

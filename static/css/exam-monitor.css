@@ -1,0 +1,9 @@
+.admin-course-context:has(.monitor-exam-picker){flex-wrap:wrap;align-items:flex-start}
+.admin-course-context:has(.monitor-exam-picker) form{flex-wrap:wrap;min-width:0;max-width:100%;align-items:center}
+.monitor-exam-picker{display:flex;align-items:center;gap:12px;min-width:0}
+.monitor-exam-picker .course-select{min-width:220px;max-width:340px}
+#monitor-exam-context{overflow-wrap:anywhere}
+#monitor-exam-context h2{margin-top:0}
+#monitor-exam-context .muted{line-height:1.8}
+[data-monitor-accepted]{display:inline-block;white-space:nowrap;color:#197451;font-variant-numeric:tabular-nums}
+@media(max-width:600px){.monitor-exam-picker{align-items:stretch;flex-direction:column;width:100%;gap:8px}.monitor-exam-picker .course-select{min-width:0;max-width:none;width:100%}}

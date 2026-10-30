@@ -93,7 +93,7 @@ def student_exam_snapshot(student_id):
     return {"state":"scheduled" if waiting else settings.get("exam_state","idle"),"common_starts_at":settings.get("exam_started_at"),"assigned":current,"started":started,"status":item.get("status") if current else "not_assigned","exam_file":item.get("exam_file") if started else None,"started_at":item.get("started_at") if started else None,"ends_at":item.get("ends_at") if started else None,"remaining_seconds":remaining,"can_start":bool(active and not started and not forced and item.get("status")=="assigned"),"can_submit":bool(active and started and remaining>0 and not forced and len(records)<limit),"forced_submit":forced,"submission_count":len(records),"max_submissions":limit,"duration_minutes":settings.get("exam_duration_minutes",90),"password_enabled":settings.get("exam_password_enabled",False),"extensions":settings.get("accepted_submission_extensions",[".zip"]),"course_id":settings.get("exam_course_id") if current else None,"title":(settings.get("exam_title") or "Kỳ thi nộp file") if current else "Kỳ thi nộp file"}
 
 
-def monitoring_snapshot(course_id="") -> dict:
+def monitoring_snapshot(course_id="", exam_id="") -> dict:
     students, sessions = read_json("students.json"), read_json("sessions.json")
     assignments, submissions = read_json("assignments.json"), read_json("submissions.json")
     latest = {}; now = datetime.now(timezone.utc)
@@ -116,8 +116,11 @@ def monitoring_snapshot(course_id="") -> dict:
         if int(telemetry.get("tab_count",1) or 1)>1: alerts.append("multiple_tabs")
         result.append({"student_id":sid,"full_name":student.get("full_name",""),"active":student.get("active",True),"logged_in":online,"ip":sess.get("ip") if sess else student.get("last_ip"),"user_agent":sess.get("user_agent","") if sess else "","last_seen":sess.get("last_seen") if sess else student.get("last_seen"),"exam_file":assignment.get("exam_file"),"exam_status":assignment.get("status","not_assigned"),"started_at":assignment.get("started_at"),"ends_at":assignment.get("ends_at"),"remaining_seconds":remaining_seconds(assignment) if assignment.get("started_at") else None,"submission_count":len(records),"latest_submission":records[-1] if records else None,"telemetry":telemetry,"alerts":alerts})
     result=admin_workspace.scope_monitor(result,course_id)
+    context=None
+    if exam_id:
+        result,context=admin_workspace.exam_monitor(result,exam_id,course_id)
     abnormal_count=sum(1 for row in result if row["alerts"])
-    return {"occurred_at":utc_now(),"students":result,"online_count":sum(1 for row in result if row["logged_in"]),"abnormal_count":abnormal_count}
+    return {"occurred_at":utc_now(),"students":result,"online_count":sum(1 for row in result if row["logged_in"]),"abnormal_count":abnormal_count,"exam":context}
 
 class Handler(BaseHTTPRequestHandler):
     server_version = "LAN-LMS/2.0"
@@ -364,7 +367,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._auth(req,"admin")
                 content="21010001|01/02/2003|Nguyen Van A\n21010002|15/08/2003|Tran Thi B\n"
                 return self._send(200,content,"text/plain; charset=utf-8",{"Content-Disposition":"attachment; filename=student_accounts_template.txt"})
-            if path=="/api/admin/monitor": self._auth(req,"admin"); return self._json(monitoring_snapshot(req.query.get("course",[""])[0]))
+            if path=="/api/admin/monitor": self._auth(req,"admin"); return self._json(monitoring_snapshot(req.query.get("course",[""])[0],req.query.get("exam",[""])[0]))
             if path.startswith("/api/admin/archive/"):
                 sess=self._auth(req,"admin"); query={k:v[-1] for k,v in req.query.items()}; action=path.rsplit("/",1)[-1]
                 if action=="list": return self._json(submission_archive.listing(query))
@@ -692,6 +695,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"ok":True,"state":settings["exam_state"],"started_at":settings["exam_started_at"]})
             if path.startswith("/api/admin/students/") and path.endswith("/force-submit"):
                 sess=self._auth(req,"admin"); sid=urllib.parse.unquote(path[len("/api/admin/students/"):-len("/force-submit")])
+                admin_workspace.validate_file_monitor_target(req.query.get("exam",[""])[0],sid)
                 assignments=read_json("assignments.json"); item=assignments.get(sid)
                 if req.query.get("course") and (not item or item.get("course_id")!=req.query["course"][0]): raise ClientError(403,"Bài thi không thuộc khóa học đang chọn.")
                 if not item or item.get("status") not in {"assigned","in_progress"}: raise ClientError(404,"Sinh viên không có bài thi đang hoạt động.")
@@ -699,6 +703,7 @@ class Handler(BaseHTTPRequestHandler):
                 audit("admin.forced_submission",sess["user_id"],client_ip(req),{"student_id":sid}); return self._json({"ok":True})
             if path.startswith("/api/admin/students/") and path.endswith("/adjust-time"):
                 sess=self._auth(req,"admin"); sid=urllib.parse.unquote(path[len("/api/admin/students/"):-len("/adjust-time")]); minutes=exam_catalog.integer(f.get("minutes","0"),"Số phút gia hạn",-1440,1440)
+                admin_workspace.validate_file_monitor_target(req.query.get("exam",[""])[0],sid)
                 if minutes < -1440 or minutes > 1440: raise ClientError(400,"Số phút điều chỉnh không hợp lệ.")
                 settings=read_json("settings.json")
                 if settings.get("exam_state")!="started": raise ClientError(409,"Kỳ thi đã kết thúc, không thể gia hạn bài cũ.")

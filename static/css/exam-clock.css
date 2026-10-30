@@ -1,0 +1,8 @@
+/* Shared scheduled-exam clock for teachers and students. */
+.exam-wait-clock{display:flex;flex-wrap:wrap;align-items:center;gap:10px 20px;padding:18px 20px;margin:16px 0;border:1px solid #cfdef8;border-radius:12px;background:#eff5ff;color:#284d85;max-width:100%;box-sizing:border-box}
+.exam-wait-clock>span{font-size:13px;font-weight:600}.exam-wait-clock>span i{margin-right:7px}
+.exam-wait-clock>strong{font:700 30px/1.2 Consolas,monospace;font-variant-numeric:tabular-nums;letter-spacing:1px;color:#245bc2;white-space:nowrap}
+.exam-wait-clock>small{flex-basis:100%;font-size:11px;color:#647896}.exam-wait-clock>strong.urgent{color:#ad590c}
+.exam-wait-clock-compact{display:inline-flex;gap:6px 12px;padding:8px 12px;margin:10px 0 0}
+.exam-wait-clock-compact>span{font-size:11px}.exam-wait-clock-compact>strong{font-size:18px;letter-spacing:0}
+@media(max-width:560px){.exam-wait-clock{padding:14px;gap:8px 12px}.exam-wait-clock>strong{font-size:26px}.exam-wait-clock-compact{padding:8px 10px}.exam-wait-clock-compact>strong{font-size:18px}}

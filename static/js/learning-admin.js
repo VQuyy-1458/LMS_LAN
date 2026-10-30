@@ -125,6 +125,19 @@
   content.addEventListener('input',e=>{if(e.target.matches('[data-grade-component]')){updateGradeTotal(e.target.closest('tr'));return;}if(e.target.id==='design-member-search'){const q=e.target.value.toLocaleLowerCase('vi');content.querySelectorAll('[data-member-search]').forEach(row=>row.hidden=!row.dataset.memberSearch.includes(q));}if(e.target.id==='design-course-search'){const position=e.target.selectionStart;search=e.target.value;render();const input=$('design-course-search');input.focus();input.setSelectionRange(position,position);}});
   window.addEventListener('popstate',()=>{selected=new URLSearchParams(location.search).get('course')||'';tab=new URLSearchParams(location.search).get('tab')||'overview';attendanceId=new URLSearchParams(location.search).get('session')||'';attendancePage=1;attendanceQuery='';if(data){render();drawAttendanceQr();}});
   let attendancePolling=false;
+  let examPolling=false;
+  async function pollCourseExams(){
+    if(examPolling||busy||document.hidden||tab!=='exams'||!selected||!data||window.adminDrafts?.dirty())return;
+    examPolling=true;
+    try{
+      const next=await window.cssRequest('/api/admin/workspace');
+      window.submissionDeadlines.sync(next.server_time);
+      const signature=d=>JSON.stringify(d.exams.filter(e=>e.course_id===selected).map(e=>[e.id,e.state,e.waiting,e.started_at,e.ends_at]));
+      if(signature(data)!==signature(next)){data=next;render();}
+    }catch(_){}finally{examPolling=false;}
+  }
+  document.addEventListener('exam-window-opened',pollCourseExams);
+  setInterval(pollCourseExams,5000);
   setInterval(async()=>{
     if(attendancePolling||busy||document.hidden||tab!=='attendance'||!attendanceId||!data)return;
     attendancePolling=true;

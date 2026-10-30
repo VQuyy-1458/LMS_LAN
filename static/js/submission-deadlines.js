@@ -3,13 +3,19 @@
   'use strict';
   let serverTime=Date.now(),received=performance.now();
   const now=()=>serverTime+performance.now()-received;
+  const pad=value=>String(value).padStart(2,'0');
+  function waiting(startsAt,{compact=false}={}){
+    if(!Number.isFinite(Date.parse(startsAt)))return '';
+    const start=window.cssEscape(startsAt);
+    return `<div class="exam-wait-clock ${compact?'exam-wait-clock-compact':''}" data-exam-opens-at="${start}"><span><i class="fa fa-clock-o" aria-hidden="true"></i> Bắt đầu sau</span><strong role="timer" aria-label="Đếm ngược đến giờ bắt đầu thi" data-deadline-countdown data-countdown-format="clock" data-expires-at="${start}" data-zero-label="Đã đến giờ">--:--:--</strong>${compact?'':'<small>Giờ : phút : giây · Đồng bộ với máy chủ</small>'}</div>`;
+  }
   function sync(value){const parsed=Date.parse(value);if(Number.isFinite(parsed)){serverTime=parsed;received=performance.now();}refresh();}
   function refresh(){
     const current=now();
     document.querySelectorAll('[data-deadline-countdown]').forEach(node=>{
       const end=Date.parse(node.dataset.expiresAt);if(!Number.isFinite(end))return;
       const seconds=Math.max(0,Math.ceil((end-current)/1000));
-      const text=seconds?`${String(Math.floor(seconds/60)).padStart(2,'0')}:${String(seconds%60).padStart(2,'0')}`:(node.dataset.zeroLabel||'Hết giờ');
+      const text=seconds?(node.dataset.countdownFormat==='clock'?`${pad(Math.floor(seconds/3600))}:${pad(Math.floor(seconds/60)%60)}:${pad(seconds%60)}`:`${pad(Math.floor(seconds/60))}:${pad(seconds%60)}`):(node.dataset.zeroLabel||'Hết giờ');
       if(node.textContent!==text)node.textContent=text;
       node.classList.toggle('urgent',seconds<=300);
     });
@@ -39,6 +45,6 @@
     if(!form||!end)return;form.dataset.expiresAt=end;
     if(allowed&&Date.parse(end)>now()&&form.dataset.deadlineClosed){delete form.dataset.deadlineClosed;form.hidden=false;form.querySelectorAll('input,select,textarea,button').forEach(n=>n.disabled=false);if(form.previousElementSibling?.dataset.deadlineMessage)form.previousElementSibling.remove();}
   }
-  window.submissionDeadlines={sync,refresh,now,updateForm};
+  window.submissionDeadlines={sync,refresh,now,updateForm,waiting};
   setInterval(refresh,250);
 })();

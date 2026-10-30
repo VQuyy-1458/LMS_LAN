@@ -100,6 +100,12 @@ def _sorted(rows, query):
 def _filtered(rows, query):
     q = query.get("q", "").strip().casefold()
     result = rows
+    if query.get("exam"):
+        from . import exam_catalog
+        exam = next((e for e in exam_catalog.listing() if e["id"] == query["exam"]), None)
+        if not exam:
+            raise learning.LearningError(404, "Không tìm thấy kỳ thi.")
+        result = [r for r in result if r["kind"] == "code" and r["_row"].get("exam_id") == exam["id"]] if exam["type"] == "programming" else [r for r in result if r["kind"] == "file" and exam.get("release_id") and r["_row"].get("release_id") == exam["release_id"]]
     for field in ("course_id", "student_id", "kind", "activity_id"):
         value = query.get({"course_id": "course", "student_id": "student", "activity_id": "activity"}.get(field, field), "")
         if value: result = [r for r in result if r[field] == value]

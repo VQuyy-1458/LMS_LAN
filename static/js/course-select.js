@@ -1,7 +1,7 @@
 /* Filters and course pickers share an accessible popup and native form values. */
 (() => {
   'use strict';
-  const selector='select[name="course"],select[name="course_id"],select[data-student-course-switch],select#admin-course-picker,select#design-switch-course,.list-controls select,#filter-form select,#archive-filter select,.notifications-toolbar select,#notification-page-size,.ref-toolbar select';
+  const selector='select[name="course"],select[name="course_id"],select[data-student-course-switch],select#admin-course-picker,select#admin-monitor-exam,select#design-switch-course,.list-controls select,#filter-form select,#archive-filter select,.notifications-toolbar select,#notification-page-size,.ref-toolbar select';
   const states=new Set(),bySelect=new WeakMap();
   let serial=0,active=null,scheduled=false,typed='',typedAt=0;
 

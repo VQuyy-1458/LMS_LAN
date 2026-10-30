@@ -35,6 +35,12 @@ assert(!examControls.includes('data-list-sort'));
 assert(examControls.includes('Trạng thái kỳ thi'));
 ui.state('exams:catalog').status='open';
 assert.deepEqual(ids(ui.view('exams:catalog',exams,'exams')),['open']);
+const scheduledExams=[{id:'waiting',title:'A waiting exam',state:'started',waiting:true},{id:'running',title:'Z running exam',state:'started',waiting:false}];
+assert.deepEqual(ids(ui.view('exams:scheduled',scheduledExams,'exams')),['running','waiting']);
+ui.state('exams:scheduled').status='upcoming';
+assert.deepEqual(ids(ui.view('exams:scheduled',scheduledExams,'exams')),['waiting']);
+ui.state('exams:scheduled').status='open';
+assert.deepEqual(ids(ui.view('exams:scheduled',scheduledExams,'exams')),['running']);
 
 const now=Date.now(),at=offset=>new Date(now+offset).toISOString();
 const assignments=[{id:'closed',title:'Bài 1',due_at:at(-60000)},{id:'soon',title:'Bài 2',opens_at:at(60000),due_at:at(120000)},{id:'open',title:'Bài 3',due_at:at(60000)}];

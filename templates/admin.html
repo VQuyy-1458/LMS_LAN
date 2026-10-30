@@ -3,6 +3,7 @@
 {% block body %}
 {% if section == 'courses' %}<link rel="stylesheet" href="/static/css/student.css"><link rel="stylesheet" href="/static/css/courses-admin.css?v=20261030-8"><link rel="stylesheet" href="/static/css/admin-attendance.css">{% endif %}
 {% if section in ['dashboard','monitor','exam','submissions'] %}<link rel="stylesheet" href="/static/css/admin-lms.css">{% endif %}
+{% if section == 'monitor' %}<link rel="stylesheet" href="/static/css/exam-monitor.css?v=20261030-9">{% endif %}
 {% if section not in ['monitor','notifications'] %}<link rel="stylesheet" href="/static/css/admin-design.css">{% endif %}
 <link rel="stylesheet" href="/static/css/admin-sidebar.css?v=20261030-3">
 {% if section in ['exam','courses'] %}<link rel="stylesheet" href="/static/css/admin-exams.css?v=20261030-4">{% endif %}
@@ -73,6 +74,7 @@
             <div id="admin-dashboard-overview"><section class="panel"><p class="muted">Đang tải tổng quan giảng dạy…</p></section></div>
             {% endif %}
             {% if section == 'monitor' %}
+            <section class="panel" id="monitor-exam-context" aria-label="Kỳ thi đang giám sát"></section>
             <section class="stats-grid admin-monitor-statistics" aria-label="Tổng quan giám sát">
                 <article class="stat-card"><span class="stat-icon blue"><i class="fa fa-users"></i></span><div><p>Sinh viên</p><strong id="monitor-stat-total">—</strong></div></article>
                 <article class="stat-card"><span class="stat-icon green"><i class="fa fa-desktop"></i></span><div><p>Đang trực tuyến</p><strong id="monitor-stat-online">—</strong></div></article>
@@ -100,7 +102,7 @@
                             <th>Trạng thái</th>
                             <th>Đề</th>
                             <th>Thời gian</th>
-                            <th>Nộp bài</th>
+                            <th id="monitor-submission-heading">Nộp bài</th>
                             <th>Trình duyệt</th>
                             <th>Cảnh báo</th>
                             <th>Điều khiển</th>
@@ -432,23 +434,23 @@
     </div>
 </div>
 <script defer src="/static/js/activity-colors.js"></script>
-<script defer src="/static/js/submission-deadlines.js?v=20261030-8"></script>
+<script defer src="/static/js/submission-deadlines.js?v=20261030-9"></script>
 <script defer src="/static/js/admin-icons.js"></script>
 <script defer src="/static/js/admin-sidebar.js"></script>
-<script defer src="/static/js/admin.js?v=20261030-8"></script>
+<script defer src="/static/js/admin.js?v=20261030-9"></script>
 {% if section not in ['monitor','notifications'] %}<script defer src="/static/js/admin-design.js"></script>{% endif %}
-{% if section == 'exam' %}<link rel="stylesheet" href="/static/css/exam-preflight.css?v=20261030-8"><script defer src="/static/js/exam-preflight.js?v=20261030-8"></script><script defer src="/static/js/exam-timing.js?v=20261030-8"></script><script defer src="/static/js/exam-test-csv.js"></script><script defer src="/static/js/programming.js?v=20261030-8"></script>{% endif %}
-{% if section in ['exam','courses'] %}<script defer src="/static/js/admin-exams.js?v=20261030-8"></script>{% endif %}
-{% if section == 'submissions' %}<link rel="stylesheet" href="/static/css/programming.css?v=20261030-8"><link rel="stylesheet" href="/static/css/submission-archive.css"><script defer src="/static/js/programming.js?v=20261030-8"></script><script defer src="/static/js/submission-archive.js"></script>{% endif %}
+{% if section == 'exam' %}<link rel="stylesheet" href="/static/css/exam-preflight.css?v=20261030-8"><script defer src="/static/js/exam-preflight.js?v=20261030-8"></script><script defer src="/static/js/exam-timing.js?v=20261030-9"></script><script defer src="/static/js/exam-test-csv.js"></script><script defer src="/static/js/programming.js?v=20261030-8"></script>{% endif %}
+{% if section in ['exam','courses'] %}<script defer src="/static/js/admin-exams.js?v=20261030-9"></script>{% endif %}
+{% if section == 'submissions' %}<link rel="stylesheet" href="/static/css/programming.css?v=20261030-8"><link rel="stylesheet" href="/static/css/submission-archive.css"><script defer src="/static/js/programming.js?v=20261030-8"></script><script defer src="/static/js/submission-archive.js?v=20261030-9"></script>{% endif %}
 {% if section == 'dashboard' %}<script defer src="/static/js/admin-teacher-calendar.js"></script>{% endif %}
-{% if section in ['dashboard','monitor','exam','submissions'] %}<script defer src="/static/js/admin-lms.js"></script>{% endif %}
+{% if section in ['dashboard','monitor','exam','submissions'] %}<script defer src="/static/js/admin-lms.js?v=20261030-9"></script>{% endif %}
 {% if section == 'courses' %}
 <script defer src="/static/vendor/zxing/zxing-browser.min.js"></script>
 <script defer src="/static/js/attendance-qr.js"></script>
 <script defer src="/static/js/file-preview.js"></script>
 <script defer src="/static/js/admin-courses-design.js?v=20261030-8"></script>
 <script defer src="/static/js/admin-attendance.js?v=20261030-8"></script>
-<script defer src="/static/js/learning-admin.js?v=20261030-8"></script>
+<script defer src="/static/js/learning-admin.js?v=20261030-9"></script>
 {% endif %}
 <script defer src="/static/js/admin-drafts.js?v=20261030-8"></script>
 {% endblock %}
