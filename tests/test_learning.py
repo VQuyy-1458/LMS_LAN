@@ -1091,6 +1091,116 @@ class LearningTests(unittest.TestCase):
         attempt=storage.read_json("programming_attempts.json")[exam_id+":s1"]
         self.assertEqual(learning.date_value(attempt["ends_at"]),begins+timedelta(minutes=10))
 
+    def test_automatic_code_schedule_needs_no_reference_or_manual_open(self):
+        begins=datetime.now(timezone.utc)+timedelta(minutes=2)
+        eid,_=self.code_exam(self.course(),scheduled_at=begins.isoformat(),duration_minutes="10",participant_ids="s1")
+        before=self.request("/api/student/workspace","s1")[1]["programming"]["exams"][0]
+        self.assertEqual(before["state"],"scheduled")
+        self.assertEqual(learning.date_value(before["started_at"]),begins)
+        self.assertEqual(learning.date_value(before["ends_at"]),begins+timedelta(minutes=10))
+        self.assertEqual(before["problems"],[])
+        self.assertFalse(before["can_start"])
+        self.assertEqual(self.request("/api/student/programming/start","s1",{"exam_id":eid})[0],409)
+        deadlines.refresh(begins-timedelta(seconds=1))
+        self.assertEqual(programming.exam(eid)["state"],"idle")
+        with patch.object(code_runner,"ready",side_effect=AssertionError("Schedule must not block on Docker")), patch.object(code_runner,"judge",side_effect=AssertionError("No reference run required")):
+            deadlines.refresh(begins+timedelta(seconds=30))
+        row=programming.exam(eid)
+        self.assertEqual(row["state"],"started")
+        self.assertEqual(learning.date_value(row["started_at"]),begins)
+        self.assertEqual(learning.date_value(row["ends_at"]),begins+timedelta(minutes=10))
+        self.assertEqual(storage.read_json("programming_attempts.json",{}),{})
+        self.assertEqual(storage.read_json("exam_preflight.json",{}),{})
+        saved=copy.deepcopy(storage.read_json("exam_catalog.json"))
+        deadlines.refresh(begins+timedelta(minutes=1))
+        self.assertEqual(storage.read_json("exam_catalog.json"),saved)
+
+    def test_automatic_schedule_respects_edits_cancellation_and_incomplete_setup(self):
+        begins=datetime.now(timezone.utc)+timedelta(minutes=5)
+        eid,fields=self.code_exam(self.course(),scheduled_at=begins.isoformat(),duration_minutes="10",participant_ids="s1")
+        later=begins+timedelta(minutes=5)
+        self.assertEqual(self.request("/api/admin/exam-configurations/save",form={**fields,"id":eid,"scheduled_at":later.isoformat()})[0],200)
+        deadlines.refresh(begins+timedelta(seconds=1))
+        self.assertEqual(programming.exam(eid)["state"],"idle")
+        self.assertEqual(self.request("/api/admin/exam-configurations/save",form={**fields,"id":eid,"scheduled_at":""})[0],200)
+        deadlines.refresh(later+timedelta(seconds=1))
+        self.assertEqual(programming.exam(eid)["state"],"idle")
+        empty,_=self.code_exam(scheduled_at=begins.isoformat(),problems="[]")
+        no_students,_=self.code_exam(scheduled_at=begins.isoformat())
+        rows=storage.read_json("exam_catalog.json")
+        next(e for e in rows if e["id"]==no_students).update(participants=[],participants_configured=True)
+        storage.write_json("exam_catalog.json",rows)
+        expired,_=self.code_exam(scheduled_at=(datetime.now(timezone.utc)-timedelta(hours=2)).isoformat(),duration_minutes="1")
+        with patch.object(programming,"control",side_effect=AssertionError("Invalid setup must not open")):
+            deadlines.refresh(later+timedelta(minutes=1))
+        for current in (empty,no_students,expired):
+            row=programming.exam(current)
+            self.assertFalse(row["auto_start_ready"])
+            self.assertTrue(row["auto_start_issues"])
+            self.assertEqual(row["state"],"idle")
+        self.assertEqual(self.request("/api/admin/exam-configurations/save",form={**fields,"id":eid})[0],200)
+        students=storage.read_json("students.json");students["s1"]["active"]=False;storage.write_json("students.json",students)
+        deadlines.refresh(begins+timedelta(seconds=1))
+        self.assertEqual(programming.exam(eid)["state"],"idle")
+
+    def test_automatic_file_schedule_requires_distribution_and_existing_files(self):
+        course=self.course()
+        begins=datetime.now(timezone.utc)+timedelta(minutes=2)
+        directory=Path(self.temp.name)/"automatic-files";directory.mkdir();(directory/"task.txt").write_text("Private question",encoding="utf-8")
+        with patch.object(exams,"EXAM_DIR",directory):
+            settings=storage.read_json("settings.json")
+            settings.update(exam_course_id=course,exam_scheduled_at=begins.isoformat(),exam_duration_minutes=10)
+            storage.write_json("settings.json",settings)
+            deadlines.refresh(begins)
+            self.assertEqual(storage.read_json("settings.json")["exam_state"],"idle")
+            self.assertEqual(self.request("/api/admin/distribute",form={"mode":"selected","exam_files":"task.txt"})[0],200)
+            before=self.request("/api/student/workspace","s1")[1]["exam"]
+            self.assertEqual(before["state"],"scheduled")
+            self.assertEqual(learning.date_value(before["common_starts_at"]),begins)
+            self.assertEqual(learning.date_value(before["common_ends_at"]),begins+timedelta(minutes=10))
+            self.assertIsNone(before["exam_file"])
+            (directory/"task.txt").unlink()
+            deadlines.refresh(begins)
+            self.assertEqual(storage.read_json("settings.json")["exam_state"],"distributed")
+            (directory/"task.txt").write_text("Private question",encoding="utf-8")
+            settings=storage.read_json("settings.json");settings["exam_participants"]=["s2"];storage.write_json("settings.json",settings)
+            deadlines.refresh(begins)
+            self.assertEqual(storage.read_json("settings.json")["exam_state"],"distributed")
+            settings["exam_participants"]=["s1"];storage.write_json("settings.json",settings)
+            release=storage.read_json("settings.json")["exam_release_id"]
+            deadlines.refresh(begins+timedelta(seconds=20))
+            opened=storage.read_json("settings.json")
+            self.assertEqual(opened["exam_state"],"started")
+            self.assertEqual(opened["exam_release_id"],release)
+            self.assertEqual(learning.date_value(opened["exam_started_at"]),begins)
+            self.assertEqual(learning.date_value(opened["exam_ends_at"]),begins+timedelta(minutes=10))
+
+    def test_automatic_schedule_worker_opens_without_any_browser_request(self):
+        import time
+        begins=datetime.now(timezone.utc)+timedelta(seconds=1)
+        eid,_=self.code_exam(self.course(),scheduled_at=begins.isoformat(),duration_minutes="10")
+        stop,thread=deadlines.start_worker()
+        try:
+            limit=time.monotonic()+5
+            while time.monotonic()<limit:
+                row=next(e for e in storage.read_json("exam_catalog.json") if e["id"]==eid)
+                if row["state"]=="started":break
+                time.sleep(.05)
+            self.assertEqual(row["state"],"started")
+            self.assertEqual(learning.date_value(row["started_at"]),begins)
+        finally:
+            stop.set();thread.join(timeout=3)
+
+    def test_manual_open_accepts_complete_exam_without_any_reference_receipt(self):
+        eid,_=self.code_exam(self.course())
+        with patch.object(code_runner,"status",return_value={"ready":True,"detail":"Ready","image_id":"qa"}):
+            report=self.request("/api/admin/exam-preflight?exam="+eid)[1]
+            self.assertTrue(report["can_open"])
+            self.assertFalse(report["problems"][0]["verified"])
+            code,result=self.request("/api/admin/exam-preflight/open",form={"exam_id":eid,"type":"programming","fingerprint":report["fingerprint"]})
+            self.assertEqual(code,200,result)
+        self.assertEqual(storage.read_json("exam_preflight.json",{}),{})
+
     def test_code_timing_changes_waiting_and_running_update_existing_attempts(self):
         future=datetime.now(timezone.utc)+timedelta(hours=1)
         exam_id,_=self.code_exam(self.course(),scheduled_at=future.isoformat(),duration_minutes="10")
@@ -1151,17 +1261,15 @@ class LearningTests(unittest.TestCase):
             self.assertEqual(state,"done")
         return self.request("/api/admin/exam-preflight?exam="+exam_id)[1]
 
-    def test_preflight_reference_required_and_never_counts_as_student_work(self):
+    def test_preflight_reference_optional_and_never_counts_as_student_work(self):
         exam_id,_=self.code_exam(self.course())
         ready={"ready":True,"detail":"Ready","image_id":"qa-image"}
         with patch.object(code_runner,"status",return_value=ready):
             report=self.request("/api/admin/exam-preflight?exam="+exam_id)[1]
-            self.assertFalse(report["can_open"])
+            self.assertTrue(report["can_open"])
             form={"exam_id":exam_id,"type":"programming","fingerprint":report["fingerprint"]}
             self.assertEqual(self.request("/api/admin/exam-preflight?exam="+exam_id,"s1")[0],403)
-            self.assertEqual(self.request("/api/admin/exam-preflight/open",form=form)[0],409)
-            self.assertFalse(self.finish_reference(exam_id,"WA")["can_open"])
-            self.assertEqual(self.request("/api/admin/exam-preflight/open",form=form)[0],409)
+            self.assertTrue(self.finish_reference(exam_id,"WA")["can_open"])
             report=self.finish_reference(exam_id)
             self.assertTrue(report["can_open"])
             self.assertEqual(programming.rows(),[])
@@ -1170,14 +1278,16 @@ class LearningTests(unittest.TestCase):
             self.assertEqual(programming.exam(exam_id)["state"],"started")
             self.assertEqual(self.request("/api/admin/exam-preflight/open",form=form)[0],409)
 
-    def test_preflight_changed_config_roster_and_image_invalidate_confirmation(self):
+    def test_preflight_changed_config_roster_invalidate_confirmation_but_image_only_invalidates_optional_run(self):
         exam_id,_=self.code_exam(self.course())
         ready={"ready":True,"detail":"Ready","image_id":"qa-image"}
         with patch.object(code_runner,"status",return_value=ready):
             original=self.finish_reference(exam_id)
             ready["image_id"]="new-image"
             form={"exam_id":exam_id,"type":"programming","fingerprint":original["fingerprint"]}
-            self.assertEqual(self.request("/api/admin/exam-preflight/open",form=form)[0],409)
+            after_image=self.request("/api/admin/exam-preflight?exam="+exam_id)[1]
+            self.assertTrue(after_image["can_open"])
+            self.assertFalse(after_image["problems"][0]["verified"])
             ready["image_id"]="qa-image"
             rows=storage.read_json("exam_catalog.json")
             next(e for e in rows if e["id"]==exam_id)["programming"]["problems"][0]["tests"][0]["output"]="4"

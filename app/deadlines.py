@@ -47,6 +47,8 @@ def exam_end(started_at, duration_minutes, ends_at=None):
 def refresh(now=None):
     now = now or datetime.now(timezone.utc)
     with learning.LOCK, atomic_transaction():
+        from . import exam_schedule
+        exam_schedule.refresh(now)
         data = learning.load()
         changed = False
         for task in data["assignments"]:

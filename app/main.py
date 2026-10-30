@@ -82,6 +82,14 @@ def student_exam_snapshot(student_id):
     current=bool(item and item.get("release_id")==settings.get("exam_release_id"))
     active=current and settings.get("exam_state")=="started" and settings.get("exam_released")
     waiting = exam_timing.waiting(settings.get("exam_state"), settings.get("exam_started_at"))
+    common_start=settings.get("exam_started_at")
+    planned_end=None
+    if settings.get("exam_state")=="distributed" and settings.get("exam_scheduled_at"):
+        row=next((e for e in exam_catalog.listing() if e["type"]=="file" and e.get("active")),None)
+        if row and row.get("auto_start_ready"):
+            waiting=True
+            common_start=row["scheduled_at"]
+            planned_end=row.get("planned_end")
     active = active and not waiting
     started=bool(current and item.get("started_at"))
     remaining=remaining_seconds(item) if started else None
@@ -90,7 +98,7 @@ def student_exam_snapshot(student_id):
     records=[r for r in read_json("submissions.json").get(student_id,[]) if current and r.get("release_id")==item.get("release_id")]
     limit=1 if settings.get("submission_policy")=="once" else int(settings.get("max_submissions",1))
     forced=bool(current and item.get("forced_submit"))
-    return {"state":"scheduled" if waiting else settings.get("exam_state","idle"),"common_starts_at":settings.get("exam_started_at"),"assigned":current,"started":started,"status":item.get("status") if current else "not_assigned","exam_file":item.get("exam_file") if started else None,"started_at":item.get("started_at") if started else None,"ends_at":item.get("ends_at") if started else None,"remaining_seconds":remaining,"can_start":bool(active and not started and not forced and item.get("status")=="assigned"),"can_submit":bool(active and started and remaining>0 and not forced and len(records)<limit),"forced_submit":forced,"submission_count":len(records),"max_submissions":limit,"duration_minutes":settings.get("exam_duration_minutes",90),"password_enabled":settings.get("exam_password_enabled",False),"extensions":settings.get("accepted_submission_extensions",[".zip"]),"course_id":settings.get("exam_course_id") if current else None,"title":(settings.get("exam_title") or "Kỳ thi nộp file") if current else "Kỳ thi nộp file"}
+    return {"state":"scheduled" if waiting else settings.get("exam_state","idle"),"common_starts_at":common_start,"planned_end":planned_end,"assigned":current,"started":started,"status":item.get("status") if current else "not_assigned","exam_file":item.get("exam_file") if started else None,"started_at":item.get("started_at") if started else None,"ends_at":item.get("ends_at") if started else None,"remaining_seconds":remaining,"can_start":bool(active and not started and not forced and item.get("status")=="assigned"),"can_submit":bool(active and started and remaining>0 and not forced and len(records)<limit),"forced_submit":forced,"submission_count":len(records),"max_submissions":limit,"duration_minutes":settings.get("exam_duration_minutes",90),"password_enabled":settings.get("exam_password_enabled",False),"extensions":settings.get("accepted_submission_extensions",[".zip"]),"course_id":settings.get("exam_course_id") if current else None,"title":(settings.get("exam_title") or "Kỳ thi nộp file") if current else "Kỳ thi nộp file"}
 
 
 def monitoring_snapshot(course_id="", exam_id="") -> dict:
@@ -310,7 +318,7 @@ class Handler(BaseHTTPRequestHandler):
                 result["exam"]["assessment_type"] = read_json("settings.json").get("exam_assessment_type", "test")
                 settings=read_json("settings.json")
                 common_end=deadlines.exam_end(settings.get("exam_started_at"),settings.get("exam_duration_minutes"),settings.get("exam_ends_at")) if settings.get("exam_state") in {"started","ended"} else None
-                result["exam"]["common_ends_at"]=common_end.isoformat() if common_end else None
+                result["exam"]["common_ends_at"]=common_end.isoformat() if common_end else result["exam"].get("planned_end")
                 result["exam"]["closed_automatically"]=settings.get("exam_closed_automatically",False)
                 return self._json(result)
             if path=="/api/student/programming/submissions":

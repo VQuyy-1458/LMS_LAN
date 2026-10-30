@@ -92,6 +92,8 @@ def exam_monitor(rows, exam_id, course_id=""):
             row["latest_submission"] = {k: records[-1].get(k) for k in ("id", "exam_id", "student_id", "problem_index", "problem_title", "submitted_at", "state")}
         result.append(row)
     context = {k: exam.get(k) for k in ("id", "title", "course_id", "type", "state", "waiting", "started_at", "ends_at")}
+    if exam.get("auto_start_ready"):
+        context["started_at"] = exam["scheduled_at"]
     context["live"] = live
     context["activity_id"] = ("code:" + exam_id) if exam["type"] == "programming" else "file:" + str(exam.get("release_id") or "")
     return result, context

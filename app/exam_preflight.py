@@ -13,8 +13,8 @@ _jobs_lock = threading.Lock()
 _jobs = {}
 
 
-def _snapshot(exam_id):
-    row = next((e for e in exam_catalog.listing() if e["id"] == exam_id), None)
+def _snapshot(exam_id, row=None, include_fingerprint=True):
+    row = row if row is not None else next((e for e in exam_catalog.listing() if e["id"] == exam_id), None)
     if row is None:
         raise learning.LearningError(404, "Không tìm thấy kỳ thi.")
     from .admin_workspace import course_members
@@ -37,6 +37,8 @@ def _snapshot(exam_id):
         release = settings.get("exam_release_id")
         assignments = read_json("assignments.json")
         assigned = {sid: a for sid, a in assignments.items() if release and a.get("release_id") == release}
+        configured = set(row.get("participants") or [])
+        check("Danh sách và đề đã phát", not configured or configured == set(assigned), "Nếu thay đổi danh sách sau khi phát đề, cần phân phối đề lại trước khi mở thi.")
         participants = sorted(assigned)
         available = {f["name"] for f in exams.list_exam_files()}
         for name in sorted({a.get("exam_file") for a in assigned.values() if a.get("exam_file")}):
@@ -60,7 +62,7 @@ def _snapshot(exam_id):
                  "state": row["state"], "duration_minutes": row["duration_minutes"], "assessment_type": row.get("assessment_type"), "scheduled_at":row.get("scheduled_at"), "description":row.get("description"),
                  "participants": participants, "invalid": invalid, "programming": row.get("programming") if code else None,
                  "file_settings": row.get("file_settings") if not code else None, "release_id": row.get("release_id"), "files": files}
-    fingerprint = hashlib.sha256(json.dumps(canonical, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()
+    fingerprint = hashlib.sha256(json.dumps(canonical, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode()).hexdigest() if include_fingerprint else None
     return row, {"exam_id": row["id"], "title": row["title"], "type": row["type"], "course_name": course["name"] if course else "Kỳ thi chung",
                  "assessment_type": row.get("assessment_type", "test"), "duration_minutes": row["duration_minutes"], "languages": languages,
                  "participants": [{"student_id": sid, "full_name": students.get(sid, {}).get("full_name", sid)} for sid in participants],
@@ -81,7 +83,7 @@ def review(exam_id):
         p["verified"] = (result.get("fingerprint") == report["fingerprint"] and result.get("image_id") == runner.get("image_id") and
                          result.get("result", {}).get("verdict") == "AC" and result["result"].get("passed") == p["tests"])
         p["verification"] = result if result.get("fingerprint") == report["fingerprint"] else None
-    report["can_open"] = all(c["ok"] for c in report["checks"]) and runner["ready"] and all(p["verified"] for p in report["problems"])
+    report["can_open"] = all(c["ok"] for c in report["checks"]) and runner["ready"]
     return report
 
 
@@ -158,12 +160,6 @@ def open_checked(session, form, ip, runner=None):
         if row["type"] == "programming":
             if not runner or not runner["ready"]:
                 raise learning.LearningError(409, "Bộ chấm chưa sẵn sàng.")
-            saved = read_json("exam_preflight.json", {}).get(exam_id, {})
-            for p in report["problems"]:
-                verified = saved.get(str(p["index"]), {})
-                result = verified.get("result", {})
-                if verified.get("fingerprint") != report["fingerprint"] or verified.get("image_id") != runner.get("image_id") or result.get("verdict") != "AC" or result.get("passed") != p["tests"]:
-                    raise learning.LearningError(409, "Mỗi bài toán cần một lời giải chuẩn đạt toàn bộ test trên cấu hình và image hiện tại.")
             from . import programming
             result = programming.control(session, {"exam_id": exam_id, "action": "start"}, ip, runner_ready=True)
         else:

@@ -188,18 +188,18 @@ def start_exam(student_id: str, supplied_password: str | None = None, ip: str | 
 
 
 @mutation
-def start_exam_session() -> dict:
+def start_exam_session(now=None, actor="admin") -> dict:
     settings = read_json("settings.json")
     if settings.get("exam_state") != "distributed":
         raise ValueError("Cần phân phối đề trước khi bắt đầu kỳ thi.")
-    now = datetime.now(timezone.utc)
+    now = now or datetime.now(timezone.utc)
     from .exam_timing import window
     begins, ends = window(settings.get("exam_scheduled_at"), settings.get("exam_duration_minutes",90), now)
     if ends <= now:
         raise ValueError("Lịch thi đã hết thời gian. Hãy điều chỉnh giờ bắt đầu trước khi mở.")
     settings.update({"exam_state": "started", "exam_released": True, "exam_started_at": begins.isoformat(), "exam_ends_at": ends.isoformat(), "exam_closed_automatically": False})
     write_json("settings.json", settings)
-    audit("exam.started_by_admin", "admin", None, {"release_id": settings.get("exam_release_id")})
+    audit("exam.started_by_admin" if actor == "admin" else "exam.started_by_schedule", actor, None, {"release_id": settings.get("exam_release_id")})
     return settings
 
 def remaining_seconds(item: dict) -> int:

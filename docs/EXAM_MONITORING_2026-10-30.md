@@ -2,6 +2,7 @@
 
 - Giảng viên thấy đồng hồ giờ : phút : giây trên danh sách kỳ thi, trong khóa học và trang cấu hình khi kỳ thi đã mở nhưng đang chờ lịch. Sinh viên thấy đồng hồ trên danh sách và trang vào thi, cho cả code và file.
 - Đồng hồ dùng thời gian máy chủ; đổi lịch sẽ cập nhật theo lần đồng bộ tiếp theo. Đến giờ bắt đầu, trang tự cập nhật trạng thái. Cập nhật đồng hồ không xóa nội dung giảng viên đang sửa.
+- Lưu đủ cấu hình cùng giờ bắt đầu là tự lên lịch, không cần chấm thử hay bấm mở thủ công. Với file cần phân phối đề xong; với code có thể tiếp tục sửa trước giờ bắt đầu. Xem quy tắc tại `EXAM_WORKFLOWS_2026-10-30.md`.
 - Mỗi kỳ thi đang diễn ra có nút **Giám sát** trên danh sách, trong khóa học và trang cấu hình. Liên kết mang mã kỳ thi; trang giám sát có bộ chọn kỳ thi và thông tin lịch để phân biệt nhiều kỳ thi cùng khóa học.
 - API `GET /api/admin/monitor?exam=<id>&course=<optional>` chỉ dành cho admin. Danh sách giới hạn theo thí sinh của kỳ thi; lượt làm, thời gian và bài nộp không lẫn kỳ thi khác. Thi file lọc theo mã phát đề (`release_id`).
 - Với code, cột **Bài đã AC / Tổng bài** hiển thị ví dụ `2/5 bài`. Mỗi bài chỉ tính một lần nếu có ít nhất một lần chấm AC có hiệu lực. WA/đang chấm không tăng số bài AC. Chấm lại thất bại do hệ thống giữ kết quả có hiệu lực trước đó, cùng quy tắc với điểm hiện tại. Giám sát tự đồng bộ mỗi 5 giây.

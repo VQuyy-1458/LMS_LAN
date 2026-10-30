@@ -3,18 +3,20 @@
 ## Mở kỳ thi trên web
 
 1. Lưu đề, cấu hình và danh sách dự thi. Với thi file, chọn cấu hình và phân phối đề trước.
-2. Chọn **Lưu và kiểm tra mở thi** (code) hoặc nút mở thi file để xem màn hình kiểm tra.
-3. Kiểm tra khóa học, loại kỳ thi, số người/danh sách, thời gian, số bài/tổng điểm, ngôn ngữ, file đề và trạng thái Docker.
-4. Với code, nhập một lời giải chuẩn cho mỗi bài bằng một ngôn ngữ được phép rồi chấm thử toàn bộ test. Mỗi bài phải AC toàn bộ test mẫu và test ẩn mới xác nhận mở được.
-5. Xác nhận mở. Có lịch tương lai thì phòng thi chờ đến giờ đó; không đặt lịch thì bắt đầu ngay. Nếu lịch đã hết thời gian, cần chỉnh lại trước khi mở.
+2. Đặt giờ bắt đầu, lưu đủ bài toán/test/ngôn ngữ và danh sách dự thi. Với thi file, phân phối đề xong là đủ điều kiện lên lịch.
+3. Trang cấu hình hiển thị **Tự mở theo lịch** và đồng hồ chờ, hoặc chỉ rõ những mục còn thiếu. Không cần bấm mở thủ công; giảng viên có thể sửa cấu hình trước giờ thi.
+4. Đến giờ, tiến trình nền mở kỳ thi trên máy chủ, không cần ai đang mở trình duyệt. Sinh viên chỉ được vào từ giờ đã đặt; vào muộn dùng thời gian còn lại của cả phòng.
+5. Không đặt lịch thì dùng nút mở ngay. Màn hình kiểm tra tổng hợp vẫn giúp xem lại khóa học, danh sách, thời gian, đề và Docker; **không bắt buộc chấm thử lời giải chuẩn**, kể cả khi kết quả thử WA hoặc đổi image.
 
-Chấm thử chạy trong Docker riêng, giới hạn một lượt chuẩn đồng thời, không tạo bài nộp/điểm sinh viên và không giữ khóa metadata trong lúc chạy. Mã lời giải chuẩn không được lưu vào dữ liệu server; chỉ lưu hash, kết quả và thông tin người kiểm tra. Nếu cấu hình/danh sách/image thay đổi, kết quả cũ không đủ để xác nhận mở.
+Chấm thử là công cụ tùy chọn, nằm trong mục thu gọn. Công cụ chạy trong Docker riêng, giới hạn một lượt chuẩn đồng thời, không tạo bài nộp/điểm sinh viên và không giữ khóa metadata trong lúc chạy. Mã lời giải chuẩn không được lưu vào dữ liệu server; chỉ lưu hash, kết quả và thông tin người kiểm tra. Thay đổi cấu hình/image làm kết quả thử cũ hết hiệu lực, không chặn việc mở thi.
+
+Web/server phải đang chạy để tự mở. Sau khi server khởi động lại trong khoảng giờ thi, hệ thống mở theo mốc giờ gốc, không cấp thêm thời gian. Lịch đã hết toàn bộ thời gian hoặc còn thiếu cấu hình sẽ không tự mở. Lịch mở độc lập với Docker; Docker cần chạy để nhận và chấm bài code theo kiểm tra hiện có. Hủy giờ bắt đầu trước khi mở sẽ hủy tự mở theo lịch. Các kỳ thi đã mở/kết thúc được giữ nguyên.
 
 Các endpoint điều khiển cũ vẫn phục vụ CLI/script tương thích; giao diện web dùng endpoint mở sau kiểm tra. Quyền admin và kiểm tra thời gian vẫn áp dụng cho cả hai luồng.
 
 ## Sửa thời gian khi chờ hoặc đang thi
 
-- Mở Cấu hình kỳ thi → **Điều chỉnh thời gian thi**.
+- Khi code còn chờ tự mở, sửa trực tiếp cấu hình đã lưu. Với file đã phân phối hoặc kỳ thi đã mở, dùng **Điều chỉnh thời gian thi**.
 - Khi đang chờ, đổi giờ bắt đầu và thời lượng hoặc giờ kết thúc cụ thể.
 - Khi đang thi, giữ giờ bắt đầu thực tế; sửa thời lượng hoặc giờ kết thúc. Hệ thống cập nhật hạn của các lượt đã vào và sinh viên vào sau dùng cùng hạn mới.
 - Thi file giữ phần gia hạn cá nhân. Thay đổi có audit. Không sửa thời gian kỳ thi đã kết thúc; dùng nút kết thúc để đóng ngay.
@@ -37,8 +39,8 @@ Mốc thời gian hiển thị theo Việt Nam (UTC+7); server kiểm tra quyề
 - `POST /api/admin/exam-timing`: cập nhật cửa sổ thi được phép, có audit.
 - Các endpoint trên chỉ dành cho admin. `exam_preflight.json` là dữ liệu runtime, không đưa lên GitHub.
 
-Browser QA: `--code-roster`, `--code-entry`, `--drafts`, `--timing`, `--enrollment`. Fixture roster/timing giả lập bộ chấm cho kiểm thử UI; kiểm thử `test_preflight_real_docker_reference_passes_sample_and_hidden_tests` dùng Docker thật khi bật `CSS_JUDGE_TESTS=1`.
+Browser QA: `--auto-exams`, `--code-roster`, `--code-entry`, `--drafts`, `--timing`, `--enrollment`. Fixture roster/timing/auto-exams giả lập bộ chấm cho kiểm thử UI; kiểm thử `test_preflight_real_docker_reference_passes_sample_and_hidden_tests` dùng Docker thật khi bật `CSS_JUDGE_TESTS=1`.
 
-Kết quả bản cập nhật: bộ thường 136 ca (131 đạt, 5 kiểm thử Docker tùy chọn bỏ qua); 43 nhóm kiểm tra trình duyệt đạt, gồm các kích thước sidebar và giao diện desktop/mobile. Kiểm thử lời giải chuẩn Docker chạy riêng đạt AC 2/2 test (mẫu và ẩn), không tạo bài nộp sinh viên. Các bộ được chạy tuần tự sau khi xử lý sự cố Docker/môi trường Windows.
+Kết quả cập nhật tự mở: bộ thường 143 ca (138 đạt, 5 kiểm thử Docker tùy chọn bỏ qua). Ba luồng trình duyệt `--auto-exams`, `--timing`, `--code-roster` đạt, gồm desktop/mobile, không chấm thử vẫn mở, tự mở không có trình duyệt, đổi/hủy lịch, giữ nháp khi đến giờ, đồng hồ/giám sát và danh sách dự thi. Bảy kiểm thử tập trung được chạy lại sau kiểm tra danh sách đã phát đề. Kiểm thử Docker thật của bộ chấm vẫn là tùy chọn riêng, không chạy lại trong thay đổi lịch thi này.
 
 Đã tạo backup có manifest hợp lệ, đối chiếu 5 bảng điểm trên dữ liệu hiện tại: điểm cũ giữ nguyên. Web được nạp lại và giữ nguyên mốc thời gian của kỳ thi đang mở.

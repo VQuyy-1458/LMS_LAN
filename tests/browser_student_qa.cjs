@@ -74,17 +74,75 @@ async function sidebarFit(base,fixture,restoreMetrics={width:1440,height:1100,de
 async function api(action,fields){return evaluate(`fetch('/api/learning/${action}',{method:'POST',body:new URLSearchParams(${JSON.stringify(fields)})}).then(async r=>({status:r.status,body:await r.json()}))`);}
 async function confirmPreflight(examId){
   await waitFor(()=>evaluate("document.querySelector('.exam-preflight-dialog[open]')"));
-  const exam=await evaluate(`fetch('/api/admin/workspace').then(r=>r.json()).then(d=>d.exams.find(e=>e.id===${JSON.stringify(examId)}))`);
-  for(const [index,problem] of (exam.programming?.problems||[]).entries()){
-    const answers=Object.fromEntries(problem.tests.map(t=>[t.input,t.output]));
-    const source='import sys\nanswers = '+JSON.stringify(answers)+'\nsys.stdout.write(answers[sys.stdin.read()])\n';
-    await evaluate(`(()=>{const f=document.querySelector('[data-preflight-reference="${index}"]');f.elements.language.value='python';f.elements.source.value=${JSON.stringify(source)};f.requestSubmit();})()`);
-    await waitFor(()=>evaluate(`document.querySelector('[data-preflight-reference="${index}"] [data-preflight-result]').textContent.includes('AC ·')`),30000);
-  }
+  // A complete exam can open immediately without running a reference solution.
   await waitFor(()=>evaluate("document.querySelector('[data-preflight-confirm]')?.disabled===false"));
   if(process.argv.includes('--code-roster'))await panelScreenshot('.exam-preflight-dialog','exam-preflight-ready-desktop.png');
   await evaluate("document.querySelector('[data-preflight-confirm]').click()");
   await waitFor(()=>evaluate("!document.querySelector('.exam-preflight-dialog[open]')"));
+}
+async function automaticExams(base,fixture){
+  const post=async(path,fields)=>{const r=await fetch(base+path,{method:'POST',headers:{Cookie:'css_session='+fixture.admin,Origin:base,'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(fields)});const body=await r.json();assert.equal(r.status,200,JSON.stringify(body));return body;};
+  const local=value=>new Date(Date.parse(value)+7*3600000).toISOString().slice(0,19);
+  await send('Network.setCookie',{name:'css_session',value:fixture.admin,url:base,httpOnly:true,sameSite:'Strict'});
+  const code=await post('/api/admin/exam-configurations/save',{type:'programming',course_id:fixture.course,title:'Tự mở kỳ thi lập trình',scheduled_at:new Date(Date.now()+3600000).toISOString(),duration_minutes:'10',languages:'python',participant_ids:'QA001',problems:JSON.stringify([{title:'Tổng hai số',statement:'Đề kín trước giờ thi',tests:[{input:'1 2',output:'3'}]}])});
+  await navigate(base+`/admin?section=exam&exam=${code.id}`);
+  await waitFor(()=>evaluate("document.querySelector('[data-auto-start-status]')?.textContent.includes('tự mở đúng giờ')"));
+  assert.equal(await evaluate("document.querySelector('#exam-config-form fieldset').disabled"),false);
+  await waitFor(()=>evaluate("/^\\d{2}:\\d{2}:\\d{2}$/.test(document.querySelector('[data-exam-clock] [role=timer]')?.textContent)"));
+  await panelScreenshot('.exam-setup','automatic-code-ready-desktop.png');
+  await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await noOverflow();await panelScreenshot('.exam-setup','automatic-code-ready-mobile.png');
+  await send('Emulation.setDeviceMetricsOverride',{width:1440,height:1100,deviceScaleFactor:1,mobile:false});
+  const begins=new Date(Date.now()+14000).toISOString();
+  await submit('#exam-config-form',{title:'Tự mở không cần chấm thử',scheduled_at:local(begins)});
+  await waitFor(()=>evaluate("document.querySelector('[data-auto-start-status]')?.textContent.includes('tự mở đúng giờ')"));
+  assert.equal(await evaluate("document.querySelector('.exam-preflight-dialog')===null"),true);
+  await send('Network.setCookie',{name:'css_session',value:fixture.student,url:base,httpOnly:true,sameSite:'Strict'});
+  await navigate(base+`/student/exams?exam=${code.id}`);
+  assert.equal(await evaluate("document.querySelector('[data-code-start]').disabled"),true);
+  assert.equal(await evaluate("document.querySelector('[data-code-problem],[data-code-editor]')===null"),true);
+  await waitFor(()=>evaluate("document.querySelector('[data-code-start]')?.disabled===false"),20000);
+  await evaluate("document.querySelector('[data-code-start]').click()");
+  await waitFor(()=>evaluate("document.querySelector('[data-code-problem]')"));
+  await send('Network.setCookie',{name:'css_session',value:fixture.admin,url:base,httpOnly:true,sameSite:'Strict'});
+  await navigate(base+'/admin?section=exam');
+  await waitFor(()=>evaluate(`!!document.querySelector('[data-exam-monitor="${code.id}"]')`));
+  const opened=await evaluate(`fetch('/api/admin/workspace').then(r=>r.json()).then(d=>d.exams.find(e=>e.id==='${code.id}'))`);
+  assert(Math.abs(Date.parse(opened.started_at)-Date.parse(begins))<1000);
+  assert.equal(Date.parse(opened.ends_at)-Date.parse(opened.started_at),600000);
+  const file=await post('/api/admin/exam-configurations/save',{type:'file',course_id:fixture.course,title:'Tự mở thi file',scheduled_at:new Date(Date.now()+3600000).toISOString(),duration_minutes:'10'});
+  await post('/api/admin/exam-configurations/activate',{id:file.id});
+  await post('/api/admin/distribute',{mode:'selected',exam_files:'timing-qa.txt'});
+  await navigate(base+`/admin?section=exam&exam=${file.id}`);
+  await waitFor(()=>evaluate("document.querySelector('[data-auto-start-status]')?.textContent.includes('tự mở đúng giờ')"));
+  await submit('[data-exam-timing-form]',{scheduled_at:local(new Date(Date.now()+12000).toISOString()),duration_minutes:'10'});
+  await send('Network.setCookie',{name:'css_session',value:fixture.student,url:base,httpOnly:true,sameSite:'Strict'});
+  await navigate(base+'/student/exams?exam=file');
+  assert.equal(await evaluate("document.querySelector('[data-action=start-exam]')===null"),true);
+  assert.equal(await evaluate("document.body.textContent.includes('Private file exam question')"),false);
+  await waitFor(()=>evaluate("document.querySelector('[data-action=start-exam]')"),20000);
+  const state=await fetch(base+'/api/admin/monitor?exam='+file.id,{headers:{Cookie:'css_session='+fixture.admin}}).then(r=>r.json());
+  assert.equal(state.exam.state,'started');
+  const dirty=await post('/api/admin/exam-configurations/save',{type:'programming',title:'Giữ nháp khi tự mở',scheduled_at:new Date(Date.now()+7000).toISOString(),duration_minutes:'10',languages:'python',problems:JSON.stringify([{title:'A',tests:[{input:'',output:'3'}]}])});
+  await send('Network.setCookie',{name:'css_session',value:fixture.admin,url:base,httpOnly:true,sameSite:'Strict'});
+  await navigate(base+`/admin?section=exam&exam=${dirty.id}`);
+  await waitFor(()=>evaluate("document.querySelector('#exam-config-form [data-admin-draft-status]')"));
+  await evaluate("(()=>{const n=document.querySelector('#exam-config-form [name=description]');n.value='Nội dung chưa lưu phải được giữ';n.dispatchEvent(new Event('input',{bubbles:true}));})()");
+  await waitFor(()=>evaluate("document.querySelector('#exam-config-form fieldset')?.disabled===true"),16000);
+  assert.equal(await evaluate("document.querySelector('#exam-config-form [name=description]').value"),'Nội dung chưa lưu phải được giữ');
+  assert.equal(await evaluate(`!!document.querySelector('[data-exam-monitor="${dirty.id}"]') && !!document.querySelector('[data-exam-timing-form]')`),true);
+  assert.equal(await evaluate("document.querySelector('[data-auto-start-status]').textContent.includes('bản nháp')"),true);
+  // No schedule: the teacher can still open now without typing a reference solution.
+  const manual=await post('/api/admin/exam-configurations/save',{type:'programming',title:'Mở ngay không chấm thử',languages:'python',problems:JSON.stringify([{title:'A',tests:[{input:'',output:'3'}]}])});
+  await send('Network.setCookie',{name:'css_session',value:fixture.admin,url:base,httpOnly:true,sameSite:'Strict'});
+  await navigate(base+`/admin?section=exam&exam=${manual.id}`);
+  await evaluate("document.querySelector('[data-code-control=start]').click()");
+  await waitFor(()=>evaluate("document.querySelector('[data-preflight-confirm]')?.disabled===false"));
+  assert.equal(await evaluate("document.querySelector('[data-preflight-reference] textarea').value"),'');
+  assert.equal(await evaluate("document.querySelector('details.preflight-reference').open"),false);
+  await confirmPreflight(manual.id);
+  await waitFor(()=>evaluate("document.querySelector('[data-code-control=end]')"));
+  assert.deepEqual(errors,[],'Automatic exam JavaScript/CSP errors');
+  console.log('PASS: save-only scheduled code/file opening, editable waiting setup, teacher/student countdowns and entry lock, original common clock, monitoring, manual opening without reference runs');
 }
 async function scheduledTiming(base,fixture){
   const adminPost=async(path,fields)=>{const r=await fetch(base+path,{method:'POST',headers:{Cookie:'css_session='+fixture.admin,Origin:base,'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(fields)});const body=await r.json();assert.equal(r.status,200,JSON.stringify(body));return body;};
@@ -397,7 +455,7 @@ async function codeRoster(base,fixture){
 }
 (async()=>{
   fs.mkdirSync(out,{recursive:true});
-  app=spawn(python,['-u',path.join(__dirname,'serve_student_qa.py')],{cwd:root,windowsHide:true,stdio:['ignore','pipe','pipe'],env:{...process.env,CSS_ROSTER_QA:['--code-roster','--code-entry','--timing'].some(flag=>process.argv.includes(flag))?'1':'',CSS_ENROLLMENT_QA:process.argv.includes('--enrollment')?'1':'',CSS_TIMING_QA:process.argv.includes('--timing')?'1':''}});
+  app=spawn(python,['-u',path.join(__dirname,'serve_student_qa.py')],{cwd:root,windowsHide:true,stdio:['ignore','pipe','pipe'],env:{...process.env,CSS_ROSTER_QA:['--code-roster','--code-entry','--timing','--auto-exams'].some(flag=>process.argv.includes(flag))?'1':'',CSS_ENROLLMENT_QA:process.argv.includes('--enrollment')?'1':'',CSS_TIMING_QA:['--timing','--auto-exams'].some(flag=>process.argv.includes(flag))?'1':''}});
   const fixture=JSON.parse(await readyProcess(app,'stdout',/QA_READY ([^\r\n]+)/));
   const base=`http://127.0.0.1:${fixture.port}`;
   browser=spawn(chrome,['--headless=new','--disable-gpu','--no-first-run','--no-default-browser-check','--use-fake-ui-for-media-stream','--use-fake-device-for-media-stream',`--use-file-for-fake-video-capture=${cameraPath}`,'--remote-debugging-port=0',`--user-data-dir=${profile}`,'about:blank'],{windowsHide:true,stdio:['ignore','ignore','pipe']});
@@ -415,6 +473,7 @@ async function codeRoster(base,fixture){
   if(process.argv.includes('--enrollment')){await enrollmentFlow(base,fixture);return;}
   if(process.argv.includes('--drafts')){await teacherDrafts(base,fixture);return;}
   if(process.argv.includes('--timing')){await scheduledTiming(base,fixture);return;}
+  if(process.argv.includes('--auto-exams')){await automaticExams(base,fixture);return;}
   await navigate(base+'/student/dashboard');
   assert.equal(await evaluate("document.querySelector('#student-nav [data-view=dashboard]').textContent.trim()"),'Dashboard');
   await waitFor(()=>evaluate("document.querySelector('.student-hero')?.textContent.includes('Nguyễn Minh Anh')"));

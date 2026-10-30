@@ -55,7 +55,15 @@
             document.querySelectorAll('[data-exam-card], [data-exam-clock]').forEach(node=>{
               const e=next.exams.find(e=>e.id===(node.dataset.examCard||node.dataset.examClock));
               const clock=node.querySelector('.exam-wait-clock');
-              if(clock&&e){if(e.waiting){clock.dataset.examOpensAt=e.started_at;delete clock.dataset.openingHandled;clock.querySelector('[data-deadline-countdown]').dataset.expiresAt=e.started_at;}else clock.remove();}
+              if(clock&&e){if(e.waiting){clock.dataset.examOpensAt=e.started_at||e.scheduled_at;delete clock.dataset.openingHandled;clock.querySelector('[data-deadline-countdown]').dataset.expiresAt=e.started_at||e.scheduled_at;}else clock.remove();}
+              if(e?.state==='started'&&!e.waiting&&node.matches('.exam-setup')){
+                const fields=node.querySelector('#exam-config-form fieldset');if(fields)fields.disabled=true;
+                document.querySelectorAll('[data-code-participant],#code-participants-form textarea,#code-participants-form button:not([data-list-clear])').forEach(n=>n.disabled=true);
+                const status=node.querySelector('[data-auto-start-status]');if(status)status.textContent='Kỳ thi đã tự mở theo lịch. Cấu hình đã lưu được dùng cho kỳ thi; nội dung chưa lưu vẫn được giữ trong bản nháp.';
+                const heading=node.querySelector('.panel-heading>.bridge-inline');if(heading&&!heading.querySelector('[data-exam-monitor]'))heading.insertAdjacentHTML('beforeend',window.examConfig.monitorLink(e));
+                if(!document.querySelector('[data-exam-timing-form]'))node.insertAdjacentHTML('afterend',window.examTiming?.view(e)||'');
+              }
+              if(e?.state==='started'&&!e.waiting){const start=node.querySelector('[data-exam-timing-form] [name=scheduled_at]');if(start)start.disabled=true;}
             });
             return;
           }

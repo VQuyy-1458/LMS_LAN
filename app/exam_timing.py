@@ -35,7 +35,7 @@ def update(session, form, ip):
         original_start = learning.date_value(row["started_at"]) if row.get("started_at") else None
         if running and requested_start and requested_start.replace(microsecond=0) != original_start.replace(microsecond=0):
             raise learning.LearningError(409, "Kỳ thi đang diễn ra: giữ giờ bắt đầu thực tế, chỉ điều chỉnh thời lượng hoặc giờ kết thúc.")
-        start = original_start if running else requested_start
+        start = original_start if running else requested_start if "scheduled_at" in form else original_start or (learning.date_value(row["scheduled_at"]) if row.get("scheduled_at") else None)
         duration = learning.integer(form, "duration_minutes", row["duration_minutes"], 1, 1440)
         mode = form.get("mode", "duration")
         if mode not in {"duration", "end"}:
@@ -53,7 +53,7 @@ def update(session, form, ip):
             end = (start or now) + timedelta(minutes=duration)
         if end <= now:
             raise learning.LearningError(400, "Giờ kết thúc phải ở tương lai. Dùng nút Kết thúc kỳ thi nếu muốn đóng ngay.")
-        if row.get("waiting") and start is None:
+        if row.get("waiting") and row["state"] == "started" and start is None:
             raise learning.LearningError(400, "Kỳ thi đang chờ cần có giờ bắt đầu.")
         published = row["state"] in {"scheduled", "started"}
         updates = {"scheduled_at": start.isoformat() if start else None, "duration_minutes": duration, "updated_at": utc_now()}

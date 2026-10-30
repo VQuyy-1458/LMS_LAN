@@ -54,7 +54,7 @@ def snapshot(sid):
     result = []
     now = datetime.now(timezone.utc)
     for row in exam_catalog.listing():
-        if row["type"] != "programming" or row["state"] == "idle" or not eligible(row, sid): continue
+        if row["type"] != "programming" or (row["state"] == "idle" and not row.get("auto_start_ready")) or not eligible(row, sid): continue
         attempt = attempts.get(row["id"] + ":" + sid)
         from .deadlines import exam_end
         common_end = exam_end(row.get("started_at"), row.get("duration_minutes"), row.get("ends_at"))
@@ -63,6 +63,7 @@ def snapshot(sid):
         item["assessment_type"] = row.get("assessment_type", "test")
         if row.get("waiting"):
             item["state"] = "scheduled"
+            item["started_at"] = row.get("started_at") or row.get("scheduled_at")
         item.update({"ends_at": common_end.isoformat() if common_end else None, "status": "expired" if (attempt and learning.date_value(attempt["ends_at"])<=now) or (common_end and common_end<=now) else row["state"], "attempt": attempt, "can_start": row["state"] == "started" and not row.get("waiting") and not attempt and (not common_end or common_end>now), "can_submit": allowed and (not common_end or common_end>now), "languages": row["programming"]["languages"], "problems": []})
         if attempt:
             item["problems"] = [{"index": i, "title": p["title"], "statement": p["statement"], "points": p["points"], "time_limit_ms": p["time_limit_ms"], "memory_limit_mb": p["memory_limit_mb"], "samples": [t for t in p["tests"] if t["sample"]]} for i, p in enumerate(row["programming"]["problems"])]
@@ -70,7 +71,7 @@ def snapshot(sid):
     return {"exams": result, "submissions": [public_submission(r) for r in rows() if r["student_id"] == sid]}
 
 
-def control(session, form, ip, runner_ready=None):
+def control(session, form, ip, runner_ready=None, now=None):
     action = form.get("action")
     if action == "start" and not (code_runner.ready() if runner_ready is None else runner_ready): raise learning.LearningError(409, "Docker/image bộ chấm chưa sẵn sàng. Chạy Docker và tạo image classroom-judge:1 trước.")
     with learning.LOCK, atomic_transaction():
@@ -92,7 +93,7 @@ def control(session, form, ip, runner_ready=None):
                     raise learning.LearningError(409, "Danh sách dự thi có sinh viên không còn thuộc khóa học hoặc tài khoản đã khóa. Hãy cập nhật danh sách trước khi mở thi.")
             else:
                 participants = sorted(s for s in members if students[s].get("active", True))
-            now = datetime.now(timezone.utc)
+            now = now or datetime.now(timezone.utc)
             from .exam_timing import window
             begins, ends = window(row.get("scheduled_at"), row["duration_minutes"], now)
             if ends <= now:

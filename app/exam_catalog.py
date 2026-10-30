@@ -31,8 +31,12 @@ def listing():
             end=exam_end(settings.get("exam_started_at"),settings.get("exam_duration_minutes"),settings.get("exam_ends_at")) if settings.get("exam_state") in {"started","ended"} else None
             row["ends_at"]=end.isoformat() if end else None
     from .exam_timing import waiting
+    from .exam_schedule import describe
     for row in rows:
-        row["waiting"] = waiting(row["state"], row.get("started_at"))
+        row.update(describe(row))
+        row["waiting"] = waiting(row["state"], row.get("started_at")) or row["auto_start_ready"]
+        if row["auto_start_ready"]:
+            row["ends_at"] = row["planned_end"]
     return rows
 
 

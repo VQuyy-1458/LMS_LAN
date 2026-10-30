@@ -39,7 +39,7 @@
     document.querySelectorAll('[data-deadline-start]').forEach(button=>{
       const end=Date.parse(button.dataset.expiresAt);if(Number.isFinite(end)&&end<=current){button.disabled=true;button.textContent='Kỳ thi đã hết giờ';}
     });
-    document.querySelectorAll('[data-exam-opens-at]').forEach(node=>{if(!node.dataset.openingHandled&&Date.parse(node.dataset.examOpensAt)<=current){node.dataset.openingHandled='true';document.dispatchEvent(new CustomEvent('exam-window-opened'));}});
+    document.querySelectorAll('[data-exam-opens-at]').forEach(node=>{if(Date.parse(node.dataset.examOpensAt)<=current&&(!node.dataset.openingHandled||Number(node.dataset.nextOpeningCheck)<=current)){node.dataset.openingHandled='true';node.dataset.nextOpeningCheck=String(current+1000);document.dispatchEvent(new CustomEvent('exam-window-opened'));}});
   }
   function updateForm(form,end,allowed){
     if(!form||!end)return;form.dataset.expiresAt=end;
