@@ -1,0 +1,4 @@
+Offline QR encoder/decoder copied from the LAN-LMS reference project's installed
+@zxing/browser 0.2.1 UMD distribution. It bundles @zxing/library and text encoding
+support. The corresponding upstream license notices are retained in this folder.
+No CDN, network QR service, or runtime npm build is needed.

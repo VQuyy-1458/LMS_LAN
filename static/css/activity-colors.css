@@ -1,0 +1,31 @@
+/* A single semantic palette, shared by both classroom roles. */
+form[data-deadline-closed="true"]{display:none}
+.deadline-closed{background:#edf1f6;color:#697a91}
+[data-activity]{--activity-color:#7754bb;--activity-bg:#f3effb;--activity-ink:#63419e;--activity-line:#ded3f1}
+[data-activity="lesson"]{--activity-color:#3d79d9;--activity-bg:#edf4ff;--activity-ink:#2e5fa9;--activity-line:#cfdef6}
+[data-activity="material"]{--activity-color:#168c83;--activity-bg:#eaf7f5;--activity-ink:#146f69;--activity-line:#c7e8e3}
+[data-activity="assignment"]{--activity-color:#c28a23;--activity-bg:#fff7e7;--activity-ink:#8c6218;--activity-line:#f1dfb7}
+[data-activity="attendance"]{--activity-color:#368d60;--activity-bg:#edf8ef;--activity-ink:#286d49;--activity-line:#cce6d3}
+[data-activity="test"]{--activity-color:#258caa;--activity-bg:#eaf7fc;--activity-ink:#226f87;--activity-line:#c7e5f0}
+[data-activity="midterm"]{--activity-color:#8658c1;--activity-bg:#f4eefc;--activity-ink:#7043a6;--activity-line:#e1d2f2}
+[data-activity="final"]{--activity-color:#c65c79;--activity-bg:#fff0f4;--activity-ink:#a44260;--activity-line:#f1cfda}
+[data-activity="announcement"]{--activity-color:#6b7c96;--activity-bg:#f0f3f8;--activity-ink:#52627b;--activity-line:#d9e1ed}
+.activity-badge[data-activity]{display:inline-flex;align-items:center;gap:6px;padding:5px 8px;border-radius:6px;background:var(--activity-bg);color:var(--activity-ink);font-size:10px;font-weight:650;line-height:1.4;white-space:nowrap}
+.activity-badge[data-activity]::before{content:'';width:6px;height:6px;flex-shrink:0;border-radius:50%;background:var(--activity-color)}
+.activity-surface .activity-badge{align-self:flex-start;max-width:100%}
+.activity-legend{display:flex;align-items:center;flex-wrap:wrap;gap:7px;margin:12px 0 18px}
+.activity-surface[data-activity]{background:var(--activity-bg);border:1px solid var(--activity-line);border-left:3px solid var(--activity-color);border-radius:9px;margin:8px 0;padding:13px 14px}
+.activity-surface[data-activity]:hover{border-color:var(--activity-color)}
+.activity-surface[data-activity] .student-date-tile,.activity-surface[data-activity] .stat-icon,.activity-surface[data-activity] .ref-resource-symbol{background:#ffffffb3;color:var(--activity-ink)}
+.activity-surface[data-activity] .student-list-title,.activity-surface[data-activity] .teacher-calendar-kind,.activity-surface[data-activity]>.ref-resource-text>strong,.activity-surface[data-activity]>strong{color:var(--activity-ink)}
+.activity-surface[data-activity].lesson-calendar-button{color:var(--activity-ink);font-size:12px}
+.activity-surface[data-activity].lesson-calendar-button small{color:var(--activity-ink)}
+.activity-table-row[data-activity]{background:var(--activity-bg)}
+.activity-table-row[data-activity]>td:first-child{border-left:3px solid var(--activity-color)}
+.student-shell .student-compact-table .activity-table-row[data-activity]:hover{background:var(--activity-bg);box-shadow:inset 0 0 0 1px var(--activity-line)}
+.activity-table-row[data-activity] .student-list-title,.activity-table-row[data-activity] .student-list-title i{color:var(--activity-ink)}
+.activity-dots{position:absolute;display:flex;justify-content:center;gap:3px;left:2px;right:2px;bottom:4px;pointer-events:none}
+.activity-dots>span[data-activity]{height:4px;width:4px;flex-shrink:0;border-radius:50%;background:var(--activity-color)}
+.student-calendar-day.has-events:has(.activity-dots)::after,.teacher-calendar-grid>button.has-events:has(.activity-dots)::after{content:none}
+.student-calendar-day.selected .activity-dots,.teacher-calendar-grid>button.selected .activity-dots{background:#ffffffd9;border-radius:8px;width:max-content;max-width:calc(100% - 4px);left:50%;right:auto;transform:translateX(-50%);padding:2px 3px;bottom:2px}
+@media(max-width:550px){.activity-surface[data-activity]{padding:12px}.activity-legend{gap:5px}.activity-badge[data-activity]{font-size:9px}}

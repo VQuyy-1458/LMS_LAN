@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Không gian học tập · LAN-LMS{% endblock %}
+{% block body %}
+<link rel="stylesheet" href="/static/css/student.css">
+<link rel="stylesheet" href="/static/css/notifications.css">
+<link rel="stylesheet" href="/static/css/admin-sidebar.css?v=20261030-3">
+<link rel="stylesheet" href="/static/css/student-workspace.css?v=20261030-3">
+<link rel="stylesheet" href="/static/css/activity-colors.css">
+<div class="admin-shell student-shell admin-sidebar-unified" id="student-app">
+  <aside class="main-sidebar" id="student-sidebar" aria-label="Điều hướng sinh viên">
+    <a class="sidebar-brand" href="/student/dashboard"><span class="brand-mark"><i class="fa fa-graduation-cap"></i></span><span>LAN-LMS<br><small>Hệ thống học tập</small></span></a>
+    <div class="sidebar-user"><span class="sidebar-avatar">{{ student.full_name[:1]|upper }}</span><div><strong>{{ student.full_name }}</strong><small>{{ session.user_id }} · Sinh viên</small></div></div>
+    <nav class="sidebar-nav" id="student-nav">
+      <p class="sidebar-label">KHÔNG GIAN HỌC TẬP</p>
+      <a href="/student/dashboard" data-view="dashboard"><i class="fa fa-th-large"></i><span>Dashboard</span></a>
+      <a href="/student/courses" data-view="courses"><i class="fa fa-book"></i><span>Khóa học của tôi</span></a>
+      <a href="/student/calendar" data-view="calendar"><i class="fa fa-calendar"></i><span>Lịch học</span></a>
+      <a href="/student/attendance" data-view="attendance"><i class="fa fa-qrcode"></i><span>Điểm danh</span></a>
+      <p class="sidebar-label">BÀI TẬP & KỲ THI</p>
+      <a href="/student/assignments" data-view="assignments"><i class="fa fa-pencil-square-o"></i><span>Bài tập</span><span class="sidebar-badge" id="assignment-badge">0</span></a>
+      <a href="/student/exams" data-view="exams"><i class="fa fa-file-text-o"></i><span>Kỳ thi</span></a>
+      <a href="/student/history" data-view="history"><i class="fa fa-history"></i><span>Lịch sử nộp bài</span></a>
+      <a href="/student/grades" data-view="grades"><i class="fa fa-bar-chart"></i><span>Kết quả học tập</span></a>
+      <p class="sidebar-label">CÁ NHÂN</p>
+      <a href="/student/notifications" data-view="notifications"><i class="fa fa-bell-o"></i><span>Thông báo</span><span class="sidebar-badge" id="notification-badge">0</span></a>
+      <a href="/student/profile" data-view="profile"><i class="fa fa-user-o"></i><span>Tài khoản</span></a>
+    </nav>
+    <div class="sidebar-footer"><span class="live-dot"></span> <span id="connection-label">Đang kết nối…</span></div>
+  </aside>
+  <div class="admin-content">
+    <header class="topbar ui-header">
+      <button class="btn btn-ghost student-menu-toggle" id="student-menu-toggle" aria-label="Mở menu" aria-controls="student-sidebar" aria-expanded="false"><i class="fa fa-bars"></i></button>
+      <div class="brand"><span id="header-location">Không gian học tập</span><span class="admin-tag">STUDENT</span></div>
+      <div class="topbar-actions"><div class="student-notification-anchor"><button class="btn btn-ghost notification-bell" id="notification-bell" type="button" aria-label="Thông báo" aria-expanded="false" aria-controls="notification-dropdown"><i class="fa fa-bell-o"></i><span class="notification-count hidden" id="bell-unread-count">0</span></button><section id="notification-dropdown" class="notification-dropdown hidden" role="dialog" aria-label="Thông báo gần đây"></section></div><form action="/logout" method="post"><button class="btn btn-ghost" type="submit"><i class="fa fa-sign-out"></i> Đăng xuất</button></form></div>
+    </header>
+    <main class="page-wrap student-page" id="main-content">
+      <div class="page-title"><div><p class="eyebrow" id="page-eyebrow">HỌC TẬP MỖI NGÀY</p><h1 id="page-heading">Không gian học tập</h1><p class="muted" id="page-description">Khóa học, bài tập và lịch học của bạn ở cùng một nơi.</p></div><button class="btn btn-secondary" id="refresh-workspace"><i class="fa fa-refresh"></i> Làm mới</button></div>
+      <div class="alert alert-error hidden" id="workspace-error" role="alert"></div>
+      <div class="alert alert-info hidden" id="workspace-update"><span>Có cập nhật mới từ giảng viên.</span><button class="btn btn-ghost" id="apply-update">Cập nhật</button></div>
+      <div id="workspace-content" aria-live="polite"><section class="panel student-loading"><i class="fa fa-circle-o-notch fa-spin"></i><p>Đang tải không gian học tập…</p></section></div>
+      <noscript><div class="alert alert-warning">Hãy bật JavaScript để sử dụng không gian học tập.</div></noscript>
+      <footer class="student-page-footer">LAN-LMS <span>Không gian học tập của sinh viên</span></footer>
+    </main>
+  </div>
+</div>
+<dialog id="student-confirm" class="student-dialog"><form method="dialog"><div class="brand-mark"><i class="fa fa-info-circle"></i></div><h2 id="confirm-title">Xác nhận</h2><p id="confirm-message" class="muted"></p><div class="student-actions"><button class="btn btn-secondary" value="cancel">Quay lại</button><button class="btn btn-primary" value="confirm">Xác nhận</button></div></form></dialog>
+<script defer src="/static/js/activity-colors.js"></script>
+<script defer src="/static/js/submission-deadlines.js"></script>
+<script defer src="/static/vendor/zxing/zxing-browser.min.js"></script>
+<script defer src="/static/js/attendance-qr.js"></script>
+<script defer src="/static/js/student-attendance.js"></script>
+<script defer src="/static/js/admin-icons.js"></script>
+<script defer src="/static/js/admin-sidebar.js"></script>
+<script defer src="/static/js/file-preview.js"></script>
+<script defer src="/static/js/student-notifications.js"></script>
+<link rel="stylesheet" href="/static/css/programming.css">
+<script defer src="/static/js/programming-student.js"></script>
+<script defer src="/static/js/programming.js"></script>
+<script defer src="/static/js/student-workspace.js"></script>
+<script defer src="/static/js/student.js"></script>
+{% endblock %}

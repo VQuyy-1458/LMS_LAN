@@ -1,0 +1,61 @@
+/* One visual language for list filters across student and teacher workspaces. */
+.app-body :is(.list-controls,.student-toolbar,.ref-toolbar,.notifications-toolbar,.archive-filter){box-sizing:border-box;align-items:end;gap:12px;padding:14px;margin:4px 0 18px;border:1px solid #e2eaf4;border-radius:12px;background:#f8fafd;min-width:0}
+.app-body .list-controls{display:flex;flex-wrap:wrap}
+.app-body :is(.list-controls,.student-toolbar,.ref-toolbar,.notifications-toolbar,.archive-filter)>label{display:grid;gap:7px;min-width:0;max-width:100%;margin:0;color:var(--lms-control-muted);font:600 12px/1.5 Inter,"Segoe UI",Arial,sans-serif;letter-spacing:0}
+.app-body .list-controls>label{flex:0 1 200px;min-width:150px}
+.app-body .list-controls .list-query{flex:1 1 240px;min-width:180px}
+.app-body :is(.list-controls,.student-toolbar,.ref-toolbar,.notifications-toolbar,.archive-filter) :is(input:not([type=radio]):not([type=checkbox]),select){box-sizing:border-box;max-width:100%;width:100%;min-width:0;min-height:var(--lms-control-height);padding:10px 13px;border:1px solid var(--lms-control-border);border-radius:var(--lms-control-radius);background:#fff;color:var(--lms-control-ink);font:400 13px/1.5 Inter,"Segoe UI",Arial,sans-serif;transition:border-color .15s,box-shadow .15s}
+.app-body :is(.list-controls,.student-toolbar,.ref-toolbar,.notifications-toolbar,.archive-filter) input::placeholder{color:#8c9bb0;opacity:1}
+.app-body :is(.list-controls,.student-toolbar,.ref-toolbar,.notifications-toolbar,.archive-filter) input:not([type=radio]):focus{outline:3px solid var(--lms-control-ring);outline-offset:1px;border-color:var(--lms-control-blue)}
+.list-search-field{position:relative;display:block;min-width:0}
+.list-search-field>.fa{position:absolute;top:50%;left:13px;transform:translateY(-50%);color:#8296b1;pointer-events:none;font-size:13px}
+.app-body .list-controls label.list-query .list-search-field>input[type=search]{padding-left:36px}
+.app-body :is(.list-controls,.student-toolbar,.ref-toolbar,.notifications-toolbar,.archive-filter) .btn{box-sizing:border-box;min-height:var(--lms-control-height);border-radius:var(--lms-control-radius);white-space:nowrap;font-size:12px}
+.app-body .list-controls .list-clear{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:10px 12px;color:#536c8e;background:transparent;border:1px solid transparent}
+.app-body .list-controls .list-clear:hover:not(:disabled){background:#eef3fa;border-color:#dbe4f0;color:#1d4ed8}
+.app-body .list-controls .list-clear:disabled{opacity:.45;cursor:default}
+.list-order{box-sizing:border-box;flex:0 0 auto;min-width:0;max-width:100%;padding:0;margin:0;border:0}
+.list-order>legend{padding:0;margin:0 0 7px;color:var(--lms-control-muted);font:600 12px/1.5 Inter,"Segoe UI",Arial,sans-serif;float:none;width:auto}
+.list-order-options{box-sizing:border-box;display:flex;align-items:stretch;gap:3px;min-height:var(--lms-control-height);padding:3px;border:1px solid var(--lms-control-border);border-radius:var(--lms-control-radius);background:#eaf0f8}
+.list-order-options .list-order-choice{position:relative;box-sizing:border-box;display:flex;align-items:center;justify-content:center;gap:7px;flex:1;min-width:0;padding:7px 12px;margin:0;border:1px solid transparent;border-radius:7px;background:transparent;color:#607592;font:500 12px/1.5 Inter,"Segoe UI",Arial,sans-serif;white-space:nowrap;cursor:pointer;transition:color .15s,background-color .15s,box-shadow .15s}
+.list-order-choice input[type=radio]{position:absolute;opacity:0;pointer-events:none;width:1px;height:1px;margin:0;padding:0}
+.list-order-choice .fa{font-size:13px}
+.list-order-options .list-order-choice:hover{color:#1d4ed8;background:#f7faff}
+.list-order-options .list-order-choice:has(input:checked){border-color:#d8e5fa;background:#fff;color:#1d4ed8;box-shadow:0 1px 3px #23456814;font-weight:650}
+.list-order-options .list-order-choice:has(input:focus-visible){outline:3px solid var(--lms-control-ring);outline-offset:1px;border-color:var(--lms-control-blue)}
+.app-body .student-toolbar>label:not(.student-search){flex:0 1 280px;min-width:160px}
+.app-body .student-toolbar>.student-search{flex:1 1 280px;min-width:200px}
+.app-body .ref-toolbar>.ref-search{flex:1 1 240px;max-width:none;min-width:0}
+.app-body .ref-toolbar>.course-select{flex:0 1 240px;width:240px;min-width:160px}
+.app-body .student-toolbar:has(+.list-controls){margin-bottom:0;padding-bottom:7px;border-bottom:0;border-radius:12px 12px 0 0}
+.app-body .student-toolbar+.list-controls{margin-top:0;padding-top:7px;border-top:0;border-radius:0 0 12px 12px}
+.app-body .archive-filter{grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
+.app-body .archive-filter .archive-search{grid-column:span 2}
+.app-body .archive-filter>.list-order{align-self:end}
+.app-body .admin-course-context .course-select{min-width:min(280px,60vw);max-width:420px}
+.app-body .notification-dropdown .list-controls{padding:10px;margin:0;border-radius:0;border-width:0 0 1px;background:#f8fafd;gap:8px}
+.app-body .notification-dropdown .list-controls>label{flex:1;min-width:110px}
+.app-body .notification-dropdown .list-controls .list-query{flex-basis:100%}
+.app-body .notifications-toolbar .notification-search{height:var(--lms-control-height);border-color:var(--lms-control-border);border-radius:var(--lms-control-radius);background:#fff}
+.app-body .notifications-toolbar .notification-search>input{min-height:0;border:0;border-radius:0}
+.app-body .notifications-toolbar .notification-total{display:inline-flex;align-items:center;min-height:var(--lms-control-height);border-radius:var(--lms-control-radius);border-color:var(--lms-control-border);background:#fff}
+.app-body .notifications-toolbar .notification-density{width:var(--lms-control-height)}
+.app-body .notifications-toolbar .notification-filters{background:transparent;border:0;padding:8px 0 0;margin:0}
+.app-body .notifications-toolbar .notification-filters>label{display:grid;gap:7px;color:var(--lms-control-muted);font:600 12px/1.5 Inter,"Segoe UI",Arial,sans-serif}
+@media(max-width:600px){
+ .app-body :is(.list-controls,.student-toolbar,.ref-toolbar,.notifications-toolbar,.archive-filter){gap:10px;padding:12px}
+ .app-body .list-controls>label{flex:1 1 140px;min-width:0}
+ .app-body .list-controls .list-query{flex-basis:100%;min-width:0}
+ .app-body .list-controls>.list-order{flex:1 1 240px}
+ .app-body .list-controls .list-clear{flex:1 1 100px}
+ .app-body .student-toolbar>label:not(.student-search),.app-body .student-toolbar>.student-search{flex:1 1 100%;min-width:0}
+ .app-body .ref-toolbar>.ref-search,.app-body .ref-toolbar>.course-select{flex:1 1 100%;width:100%;min-width:0}
+ .app-body .archive-filter{grid-template-columns:minmax(0,1fr)}
+ .app-body .archive-filter .archive-search{grid-column:auto}
+ .app-body .admin-course-context .course-select{min-width:0;max-width:none}
+}
+@media(prefers-reduced-motion:reduce){.list-order-options .list-order-choice,.app-body .list-controls input{transition:none}}
+
+.app-body :is(#notification-search,#participant-search){box-sizing:border-box;min-height:var(--lms-control-height);border:1px solid var(--lms-control-border);border-radius:var(--lms-control-radius);padding:10px 13px;background:#fff;color:var(--lms-control-ink);font:400 13px/1.5 Inter,"Segoe UI",Arial,sans-serif}
+.app-body :is(#notification-search,#participant-search):focus{outline:3px solid var(--lms-control-ring);outline-offset:1px;border-color:var(--lms-control-blue)}
+.app-body .admin-course-context form>label{white-space:nowrap}

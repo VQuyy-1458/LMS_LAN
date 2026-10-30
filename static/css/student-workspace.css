@@ -1,0 +1,78 @@
+/* Pastel course cards, scoped to the student workspace. */
+.student-shell .panel.student-course{--course-cover:#edf3ff;--course-accent:#527fe3;padding:0;background:#fff;border-color:#e2e9f5;box-shadow:none}
+.student-shell .student-course.student-course-mint{--course-cover:#eaf6f3;--course-accent:#4c9e8e}
+.student-shell .student-course.student-course-lilac{--course-cover:#f2eefb;--course-accent:#9478bf}
+.student-shell .student-course-cover{position:relative;isolation:isolate;overflow:hidden;min-height:116px;padding:20px;flex-direction:row;align-items:flex-start;gap:12px;background:var(--course-cover);border:0}
+.student-shell .student-course-cover::after{content:"";position:absolute;z-index:-1;top:27px;right:-38px;width:128px;height:160px;border:22px solid #ffffff40;border-radius:28px;transform:rotate(32deg);pointer-events:none}
+.student-shell .student-course-cover-icon{display:grid;place-items:center;flex-shrink:0;width:49px;height:49px;background:#ffffffa8;border:1px solid #ffffffc4;border-radius:13px}
+.student-shell .student-course-cover-icon .fa{font-size:24px;color:var(--course-accent)}
+.student-shell .student-course-cover .student-status{background:#ffffffc7;color:#8c96a8;font-size:10px;font-weight:600;border-radius:6px;padding:6px 8px;max-width:100%;white-space:normal}
+.student-shell .student-course-cover .student-status.green{color:#258778}
+.student-shell .student-course-body{padding:22px 20px 20px}
+.student-shell .student-course-code{display:block;color:#8098bc;letter-spacing:1px;font-size:10px;font-weight:650;margin-bottom:10px;overflow-wrap:anywhere}
+.student-shell .student-course-body h3{font-size:17px;color:#20324c;line-height:1.45;margin:0 0 6px;overflow-wrap:anywhere}
+.student-shell .student-course-body p{min-height:0;font-size:12px;color:#8b9bb0;margin:0 0 22px;line-height:1.6}
+.student-shell .student-course-meta{justify-content:flex-end;border-top:1px solid #e3eaf5;padding-top:18px}
+.student-shell .student-course-meta a{display:inline-flex;align-items:center;gap:10px;background:#edf3ff;color:#2864e8;border-radius:8px;padding:9px 12px;font-size:11px;font-weight:500;text-decoration:none}
+.student-shell .student-course-meta a:hover{background:#e1ebff}
+.student-shell .student-course-meta a:focus-visible{outline:2px solid #2864e8;outline-offset:3px}
+/* Student-only alignment with the existing teaching workspace. */
+.student-shell input,.student-shell select,.student-shell textarea,.student-detail-dialog input,.student-detail-dialog select,.student-detail-dialog textarea{font-family:inherit;font-weight:400}.student-course-switch select{width:100%;padding:12px 14px;background:white;border:1px solid #dce5f1;border-radius:9px;font:400 12px Inter,"Segoe UI",Arial,sans-serif;color:#526c91}.student-shell .student-status{gap:6px}#attendance-camera-stop[hidden]{display:none}.student-detail-dialog [role=alert]{color:#b13c2d}
+.student-shell .student-stack,.student-shell .panel,.student-course-tabs{min-width:0}.student-detail-dialog .table-wrap{overflow:auto;max-width:100%}.student-detail-dialog table{min-width:560px;width:100%;border-collapse:collapse;text-align:left;font-size:12px}.student-detail-dialog th,.student-detail-dialog td{padding:12px;border-bottom:1px solid #e3eaf4}.student-detail-dialog td small{display:block;color:#8a9bb0;margin-top:6px}
+.student-shell .topbar .brand{min-width:0}.student-shell .topbar #header-location{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.student-shell .topbar-actions .btn{white-space:nowrap}.student-swipe-hint{display:none}
+@media(max-width:550px){.student-shell .topbar .admin-tag{display:none}.student-swipe-hint{display:block;color:#98a6b8;font-size:10px;margin:12px 0 0}}
+.student-shell{font-family:Inter,"Segoe UI",Arial,sans-serif;color:#20324c;background:#f4f7fb}.student-shell .student-page{max-width:none;padding:32px;min-height:calc(100vh - 72px)}.student-shell .admin-content{width:calc(100% - 244px)}.student-shell .topbar{height:72px;min-height:72px;padding:0 32px;border-bottom:1px solid #e6ecf4}.student-shell .panel{border:1px solid #e2e9f2;border-radius:14px;box-shadow:none;padding:24px}.student-shell .page-title h1{font-size:29px;color:#20324c}.student-shell .eyebrow{color:#7088aa;font-size:10px;letter-spacing:1.8px}.student-shell .btn{font-size:12px;border-radius:8px}.student-shell .btn-primary{background:#2864e8;border-color:#2864e8}.student-shell .muted{color:#8291a7}.student-section-head{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:20px}.student-section-head h2{margin:0}.student-section-head>.muted{font-size:12px}.student-course-breadcrumb{display:flex;align-items:center;gap:12px;font-size:11px;color:#8c9bb0}.student-course-heading{display:flex;justify-content:space-between;align-items:center;gap:20px;margin:4px 0}.student-course-title{display:flex;align-items:center;gap:16px;min-width:0}.student-course-title h1{font-size:25px;margin:0 0 10px;overflow-wrap:anywhere}.student-course-symbol{width:56px;height:56px;display:grid;place-items:center;border-radius:14px;background:#e8efff;color:#487be3;font-size:22px;flex-shrink:0}.student-course-subtitle{display:flex;gap:14px;align-items:center;flex-wrap:wrap;font-size:11px;color:#8999b0}.student-course-switch{max-width:310px;min-width:220px}.student-shell .student-course-tabs{border-bottom:1px solid #dce5f1;margin-bottom:5px;gap:24px;border-radius:0}.student-shell .student-course-tabs a{background:transparent;border:0;border-bottom:2px solid transparent;border-radius:0;padding:14px 0;color:#8595ac;font-size:12px;font-weight:400}.student-shell .student-course-tabs a.active{border-bottom-color:#2864e8;color:#2864e8;font-weight:650}.student-course-tabs i{margin-right:5px}.student-live-filters label{font-size:12px;color:#7f90a8}.student-live-filters .student-search{flex:2}.student-shell .student-compact-table{min-width:650px}.student-shell .student-compact-table th{font-size:10px;background:#f6f8fc;color:#8d9db3;letter-spacing:.7px;padding:14px}.student-shell .student-compact-table td{padding:16px 14px;font-size:12px;vertical-align:middle}.student-compact-table tr[data-learning-row]{cursor:pointer}.student-compact-table tr[data-learning-row]:hover{background:#f8faff}.student-list-title{border:0;background:transparent;padding:0;text-align:left;font:inherit;font-weight:650;color:#344f72;cursor:pointer;line-height:1.7}.student-list-title i{color:#7496cd;margin-right:8px}.student-summary{display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden;max-width:320px;line-height:1.6;color:#8b9bb0}.student-list-actions{display:flex;gap:6px;align-items:center;white-space:nowrap}.student-list-footer{display:flex;justify-content:space-between;align-items:center;color:#93a1b5;font-size:11px;margin-top:18px}.student-list-footer .student-pagination{margin:0}.student-list-empty{text-align:center;padding:38px!important;color:#8d9db3}.student-detail-dialog{width:min(900px,calc(100% - 32px));max-width:900px;max-height:90vh;overflow:auto;padding:24px;border:1px solid #dce5f1;border-radius:14px;color:#253b57}.student-detail-dialog::backdrop{background:#172b4d70}.student-detail-dialog>.student-detail-head{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-bottom:20px}.student-detail-dialog h2{font-size:20px}.student-detail-dialog .panel{border:0;box-shadow:none;padding:0;margin:0}.student-detail-dialog .student-description{color:#627892}.student-detail-dialog .student-upload{padding:20px;margin-top:20px}.student-detail-dialog pre{white-space:pre-wrap;overflow-wrap:anywhere}.student-detail-head h2{margin:0}.student-scan-panel #attendance-camera{width:100%;max-width:480px;max-height:380px;object-fit:cover;border-radius:12px;background:#192e50;display:block;margin:16px auto}.student-scan-panel #attendance-camera[hidden]{display:none}.student-scan-success{color:#238065;background:#eaf8f0;padding:14px;border-radius:9px;line-height:1.7}.student-shell i[data-design-icon]{display:inline-flex;font-style:normal;align-items:center;justify-content:center;width:1em;height:1em}.student-shell i[data-design-icon]:before{content:none}.student-shell i[data-design-icon] svg{width:100%;height:100%;display:block}.student-shell .sidebar-nav a.active{background:#2e6bea}.student-shell .main-sidebar{display:flex;flex-direction:column}.student-shell .student-hero{background:linear-gradient(115deg,#192e50,#2864e8)}
+@media(max-width:1000px){.student-course-heading{flex-wrap:wrap}.student-course-switch{max-width:none;flex:1}.student-shell .student-course-tabs{gap:20px}.student-section-head{flex-wrap:wrap}}
+@media(max-width:900px){.student-shell .main-sidebar{display:none}.student-shell .admin-content{width:100%;margin-left:0}.student-shell.menu-open .main-sidebar{display:flex;background:#192e50;top:72px;bottom:0;width:244px}.student-shell .student-page{padding:24px 18px}.student-shell .topbar{height:72px;min-height:72px;padding:0 18px}.student-shell .sidebar-brand{height:91px}.student-course-title h1{font-size:23px}}
+@media(max-width:550px){.student-shell .panel{padding:18px}.student-shell .student-course-tabs{gap:16px;flex-wrap:nowrap;overflow:auto}.student-shell .student-course-tabs a{white-space:nowrap}.student-course-title{align-items:flex-start}.student-course-title h1{font-size:21px}.student-course-symbol{height:44px;width:44px;font-size:18px}.student-course-subtitle{gap:9px}.student-detail-dialog{padding:20px}.student-list-footer{gap:10px;flex-wrap:wrap}.student-list-footer .student-pagination{gap:7px}.student-section-head .student-status{white-space:normal}}
+
+/* Keep every student navigation link visible at common viewport heights. */
+.student-shell .main-sidebar{height:100vh;height:100dvh;overflow:hidden}
+.student-shell .sidebar-brand{height:72px;min-height:72px;padding:16px 23px;flex-shrink:0}
+.student-shell .sidebar-brand .brand-mark{width:35px;height:37px;font-size:21px}
+.student-shell .sidebar-user{min-height:64px;padding:12px 23px;flex-shrink:0}
+.student-shell .sidebar-user>div{min-width:0}
+.student-shell .sidebar-nav{display:flex;flex-direction:column;gap:2px;min-height:0;padding:8px 12px;overscroll-behavior:contain}
+.student-shell .sidebar-label{flex-shrink:0;padding:8px 12px 4px;line-height:14px}
+.student-shell .sidebar-nav a{flex-shrink:0;min-height:36px;margin:0;padding:8px 12px;line-height:20px}
+.student-shell .sidebar-footer{min-height:32px;padding:8px 23px;line-height:16px;flex-shrink:0}
+@media(max-height:760px){
+  .student-shell .sidebar-brand{height:60px;min-height:60px;padding:10px 23px}
+  .student-shell .sidebar-user{min-height:56px;padding:8px 23px}
+  .student-shell .sidebar-nav{padding:6px 10px;gap:1px}
+  .student-shell .sidebar-label{padding:4px 12px 2px;line-height:14px}
+  .student-shell .sidebar-nav a{min-height:34px;padding:7px 12px}
+  .student-shell .sidebar-footer{min-height:28px;padding:6px 23px}
+}
+@media(max-height:640px){
+  .student-shell .sidebar-brand{height:52px;min-height:52px;padding:7px 23px}
+  .student-shell .sidebar-user{min-height:48px;padding:6px 23px}
+  .student-shell .sidebar-avatar{width:32px;height:32px}
+  .student-shell .sidebar-nav{padding:4px 10px;gap:0}
+  .student-shell .sidebar-nav a{min-height:32px;padding:6px 12px}
+}
+@media(max-height:540px){
+  .student-shell .sidebar-brand{height:44px;min-height:44px;padding:4px 23px}
+  .student-shell .sidebar-brand .brand-mark{height:32px;width:32px}
+  .student-shell .sidebar-brand small{display:none}
+  .student-shell .sidebar-user{min-height:40px;padding:4px 23px}
+  .student-shell .sidebar-label{padding:3px 12px 1px}
+  .student-shell .sidebar-nav a{min-height:28px;padding:4px 12px}
+  .student-shell .sidebar-footer{min-height:24px;padding:4px 23px}
+}
+@media(max-width:900px){
+  .student-shell.menu-open .main-sidebar{height:calc(100vh - 72px);height:calc(100dvh - 72px)}
+  .student-shell .sidebar-brand{display:none}
+}
+@media(max-width:900px) and (max-height:480px){
+  .student-shell.menu-open .main-sidebar{width:min(480px,100vw)}
+  .student-shell .sidebar-nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-content:start;gap:0 6px}
+  .student-shell .sidebar-label{grid-column:1/-1;padding:2px 12px 0}
+  .student-shell .sidebar-nav a{min-width:0;min-height:30px;padding:5px 12px}
+}
+@media(max-width:900px) and (max-height:360px){
+  .student-shell .sidebar-user{min-height:40px;padding:3px 23px}
+  .student-shell .sidebar-user strong{line-height:16px}
+  .student-shell .sidebar-user small{line-height:13px;margin-top:1px}
+  .student-shell .sidebar-footer{display:none}
+}

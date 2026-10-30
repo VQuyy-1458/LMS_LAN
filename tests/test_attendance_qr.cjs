@@ -1,0 +1,10 @@
+const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),assert=require('node:assert/strict');
+const context=vm.createContext({window:{},URL,location:{origin:'http://127.0.0.1:8080'}});
+vm.runInContext(fs.readFileSync(path.join(__dirname,'../static/js/attendance-qr.js'),'utf8'),context);
+const parse=value=>JSON.parse(JSON.stringify(context.window.classroomQr.parse(value)));
+const session='0123456789abcdef0123',code='ABCDEF12';
+for(const prefix of ['http://localhost:8080','http://192.168.1.55:8080','https://classroom.lan',''])assert.deepEqual(parse(prefix+'/student/attendance?session='+session+'&code='+code),{session,code});
+assert.deepEqual(parse('/student/attendance?session='+session.toUpperCase()+'&code='+code.toLowerCase()),{session,code});
+assert.deepEqual(parse('http://localhost:8080/student/attendance?session=demo-v1-network-attendance-2&code='+code),{session:'demo-v1-network-attendance-2',code});
+for(const value of ['javascript:alert(1)','https://example.test/?session='+session+'&code='+code,'/student/attendance?session=1&code='+code,'/student/attendance?session='+session+'&code=BAD','/student/attendance?session='+session+'&session='+session+'&code='+code,'/student/attendance?session='+session+'&code='+code+'&code='+code])assert.throws(()=>parse(value));
+console.log('PASS: QR allows localhost/LAN/HTTPS aliases without navigating; rejects malformed and duplicate session/token fields');

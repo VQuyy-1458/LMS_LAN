@@ -1,0 +1,43 @@
+# Local Python / Node environments and caches
+.venv/
+.venv-windows/
+venv/
+node_modules/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Runtime records contain accounts, sessions, grades and personal data.
+# These folders are created on first run; never publish classroom data.
+/data/
+/learning-files/
+/de-thi/
+/submissions/
+/programming-submissions/
+/judge-work/
+/demo-inputs/
+/backups/
+/logs/
+/previews/
+*.server.lock
+.*.server.lock
+
+# Local credentials and TLS material
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.keystore
+
+# Editor / OS metadata
+.idea/
+.vscode/
+._*
+.DS_Store
+Thumbs.db
+Desktop.ini

@@ -1,0 +1,5 @@
+/* Minimal Tailwind-compatible local utility fallback for first launch.
+   Generate the full Tailwind build with `npm install && npm run build` before deployment. */
+*,::before,::after{box-sizing:border-box}
+.min-h-screen{min-height:100vh}.flex{display:flex}.grid{display:grid}.items-center{align-items:center}.justify-center{justify-content:center}.w-full{width:100%}.mx-auto{margin-left:auto;margin-right:auto}.p-6{padding:1.5rem}.p-8{padding:2rem}.px-6{padding-left:1.5rem;padding-right:1.5rem}.py-8{padding-top:2rem;padding-bottom:2rem}.bg-slate-50{background-color:#f8fafc}.bg-white{background-color:#fff}.rounded-2xl{border-radius:1rem}.shadow-xl{box-shadow:0 20px 25px -5px rgb(0 0 0/.1),0 8px 10px -6px rgb(0 0 0/.1)}.max-w-md{max-width:28rem}.max-w-4xl{max-width:56rem}.max-w-7xl{max-width:80rem}.grid-cols-1{grid-template-columns:repeat(1,minmax(0,1fr))}.gap-4{gap:1rem}
+@media(min-width:768px){.md\:grid-cols-4{grid-template-columns:repeat(4,minmax(0,1fr))}}

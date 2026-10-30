@@ -1,0 +1,13 @@
+{
+  "name": "classroom-submission-server-ui",
+  "private": true,
+  "scripts": {
+    "test": "node tests/run_checks.cjs",
+    "test:browser": "node tests/run_checks.cjs --browser",
+    "build:css": "tailwindcss -i ./assets/tailwind.input.css -o ./static/css/tailwind.css --minify",
+    "build": "npm run build:css"
+  },
+  "devDependencies": {
+    "tailwindcss": "3.4.17"
+  }
+}
