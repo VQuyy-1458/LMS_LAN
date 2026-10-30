@@ -169,4 +169,6 @@
   const observer=new MutationObserver(records=>{if(records.some(r=>(r.type==='childList'&&!r.target.closest?.('.course-select-trigger,.course-select-menu,.course-select-error'))||r.target.matches?.(selector)))schedule();});
   observer.observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['disabled','selected','value','aria-label','hidden','style','class']});
   refresh();
+  document.addEventListener('admin-draft-restored',refresh);
+  document.addEventListener('admin-draft-select-reset',refresh,true);
 })();

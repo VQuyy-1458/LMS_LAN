@@ -1,14 +1,15 @@
 {% extends "base.html" %}
 {% block title %}{{ 'Khóa học' if section == 'courses' else 'Admin Dashboard' }} · LAN-LMS{% endblock %}
 {% block body %}
-{% if section == 'courses' %}<link rel="stylesheet" href="/static/css/student.css"><link rel="stylesheet" href="/static/css/courses-admin.css"><link rel="stylesheet" href="/static/css/admin-attendance.css">{% endif %}
+{% if section == 'courses' %}<link rel="stylesheet" href="/static/css/student.css"><link rel="stylesheet" href="/static/css/courses-admin.css?v=20261030-8"><link rel="stylesheet" href="/static/css/admin-attendance.css">{% endif %}
 {% if section in ['dashboard','monitor','exam','submissions'] %}<link rel="stylesheet" href="/static/css/admin-lms.css">{% endif %}
 {% if section not in ['monitor','notifications'] %}<link rel="stylesheet" href="/static/css/admin-design.css">{% endif %}
 <link rel="stylesheet" href="/static/css/admin-sidebar.css?v=20261030-3">
 {% if section in ['exam','courses'] %}<link rel="stylesheet" href="/static/css/admin-exams.css?v=20261030-4">{% endif %}
-{% if section == 'exam' %}<link rel="stylesheet" href="/static/css/programming.css">{% endif %}
+{% if section == 'exam' %}<link rel="stylesheet" href="/static/css/programming.css?v=20261030-8">{% endif %}
 <link rel="stylesheet" href="/static/css/activity-colors.css">
-<div class="admin-shell admin-sidebar-unified {{ 'course-admin-shell' if section == 'courses' else '' }} {{ 'admin-redesign' if section not in ['monitor','notifications'] else '' }}" data-admin-section="{{ section|default('dashboard') }}">
+<link rel="stylesheet" href="/static/css/admin-drafts.css?v=20261030-8">
+<div class="admin-shell admin-sidebar-unified {{ 'course-admin-shell' if section == 'courses' else '' }} {{ 'admin-redesign' if section not in ['monitor','notifications'] else '' }}" data-admin-section="{{ section|default('dashboard') }}" data-draft-owner="{{ session.user_id }}">
     <aside class="main-sidebar" aria-label="Điều hướng quản trị">
         <a class="sidebar-brand" href="/admin?section=dashboard"><span class="brand-mark"><i
                 class="fa fa-shield"></i></span><span>LAN-LMS<br><small>Hệ thống học tập</small></span></a>
@@ -174,11 +175,11 @@
                     <div><h2><i class="fa fa-random"></i> Quy trình kỳ thi</h2>
                         <p class="muted">Thực hiện lần lượt: phân phối đề, bắt đầu kỳ thi, kết thúc kỳ thi.</p></div>
                     <div class="exam-control"><span
-                            class="status-pill {{ 'status-green' if settings.exam_state == 'started' else 'status-amber' if settings.exam_state == 'distributed' else 'status-gray' }}">{{ 'Đang diễn ra' if settings.exam_state == 'started' else 'Đã phân phối - chờ bắt đầu' if settings.exam_state == 'distributed' else 'Chưa bắt đầu' }}</span>
+                            class="status-pill {{ 'status-green' if settings.exam_state == 'started' else 'status-amber' if settings.exam_state == 'distributed' else 'status-gray' }}">{{ 'Chờ đến giờ bắt đầu' if settings.exam_state == 'scheduled' else 'Đang diễn ra' if settings.exam_state == 'started' else 'Đã phân phối - chờ bắt đầu' if settings.exam_state == 'distributed' else 'Chưa bắt đầu' }}</span>
                         <button id="start-exam-admin" class="btn btn-primary" type="button" {% if settings.exam_state
                                 !='distributed' %}disabled{% endif %}><i class="fa fa-play"></i> Bắt đầu kỳ thi
                         </button>
-                        <button id="end-exam" class="btn btn-danger" type="button" {% if settings.exam_state !='started'
+                        <button id="end-exam" class="btn btn-danger" type="button" {% if settings.exam_state not in ['started','scheduled']
                                 %}disabled{% endif %}><i class="fa fa-stop"></i> Kết thúc kỳ thi
                         </button>
                     </div>
@@ -431,22 +432,23 @@
     </div>
 </div>
 <script defer src="/static/js/activity-colors.js"></script>
-<script defer src="/static/js/submission-deadlines.js"></script>
+<script defer src="/static/js/submission-deadlines.js?v=20261030-8"></script>
 <script defer src="/static/js/admin-icons.js"></script>
 <script defer src="/static/js/admin-sidebar.js"></script>
-<script defer src="/static/js/admin.js"></script>
+<script defer src="/static/js/admin.js?v=20261030-8"></script>
 {% if section not in ['monitor','notifications'] %}<script defer src="/static/js/admin-design.js"></script>{% endif %}
-{% if section == 'exam' %}<script defer src="/static/js/exam-test-csv.js"></script><script defer src="/static/js/programming.js"></script>{% endif %}
-{% if section in ['exam','courses'] %}<script defer src="/static/js/admin-exams.js?v=20261030-4"></script>{% endif %}
-{% if section == 'submissions' %}<link rel="stylesheet" href="/static/css/programming.css"><link rel="stylesheet" href="/static/css/submission-archive.css"><script defer src="/static/js/programming.js"></script><script defer src="/static/js/submission-archive.js"></script>{% endif %}
+{% if section == 'exam' %}<link rel="stylesheet" href="/static/css/exam-preflight.css?v=20261030-8"><script defer src="/static/js/exam-preflight.js?v=20261030-8"></script><script defer src="/static/js/exam-timing.js?v=20261030-8"></script><script defer src="/static/js/exam-test-csv.js"></script><script defer src="/static/js/programming.js?v=20261030-8"></script>{% endif %}
+{% if section in ['exam','courses'] %}<script defer src="/static/js/admin-exams.js?v=20261030-8"></script>{% endif %}
+{% if section == 'submissions' %}<link rel="stylesheet" href="/static/css/programming.css?v=20261030-8"><link rel="stylesheet" href="/static/css/submission-archive.css"><script defer src="/static/js/programming.js?v=20261030-8"></script><script defer src="/static/js/submission-archive.js"></script>{% endif %}
 {% if section == 'dashboard' %}<script defer src="/static/js/admin-teacher-calendar.js"></script>{% endif %}
 {% if section in ['dashboard','monitor','exam','submissions'] %}<script defer src="/static/js/admin-lms.js"></script>{% endif %}
 {% if section == 'courses' %}
 <script defer src="/static/vendor/zxing/zxing-browser.min.js"></script>
 <script defer src="/static/js/attendance-qr.js"></script>
 <script defer src="/static/js/file-preview.js"></script>
-<script defer src="/static/js/admin-courses-design.js"></script>
-<script defer src="/static/js/admin-attendance.js"></script>
-<script defer src="/static/js/learning-admin.js"></script>
+<script defer src="/static/js/admin-courses-design.js?v=20261030-8"></script>
+<script defer src="/static/js/admin-attendance.js?v=20261030-8"></script>
+<script defer src="/static/js/learning-admin.js?v=20261030-8"></script>
 {% endif %}
+<script defer src="/static/js/admin-drafts.js?v=20261030-8"></script>
 {% endblock %}

@@ -6,6 +6,8 @@ Repo chỉ chứa mã nguồn, tài nguyên giao diện và kiểm thử. Tài k
 
 **Chạy nhanh trên Windows:** nhấp đúp [CHAY_WEB_LAN.bat](CHAY_WEB_LAN.bat). Web tự mở và hiện địa chỉ cho các máy cùng LAN; xem [hướng dẫn](docs/CHAY_WEB_LAN.md).
 
+**Luồng thi hiện tại:** [kiểm tra/chấm thử trước khi mở thi, chờ đúng lịch, sửa thời gian khi đang thi và bản nháp giảng viên](docs/EXAM_WORKFLOWS_2026-10-30.md). [Quy tắc tính điểm theo ngày tham gia khóa học](docs/ENROLLMENT_GRADING_2026-10-30.md).
+
 > **A lightweight, self-hosted Learning Management System (LMS) for exams — designed for classroom LAN use today, with a roadmap toward public web-server hosting.**
 
 Classroom Submission Server (CSS) supports courses, materials, assignments, QR attendance, notifications, weighted gradebooks, file exams and programming exams with a Docker judge. The Admin can monitor student status, adjust file-exam time, manage submissions and send notifications from the web interface.

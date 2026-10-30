@@ -1,5 +1,5 @@
 /* Headless Chromium integration/visual QA using CDP; no npm packages required. */
-const {spawn}=require('node:child_process');
+const {spawn,spawnSync}=require('node:child_process');
 const fs=require('node:fs');
 const os=require('node:os');
 const path=require('node:path');
@@ -21,10 +21,10 @@ let app,browser,socket;
 const delay=ms=>new Promise(r=>setTimeout(r,ms));
 async function waitFor(fn,ms=12000){const end=Date.now()+ms;let last;while(Date.now()<end){try{const value=await fn();if(value)return value;}catch(e){last=e;}await delay(100);}throw last||new Error('Timed out');}
 async function readyProcess(proc,stream,pattern){return new Promise((resolve,reject)=>{let all='';const timer=setTimeout(()=>reject(new Error('Process readiness timeout')),15000);proc[stream].on('data',data=>{all+=data;const match=all.match(pattern);if(match){clearTimeout(timer);resolve(match[1]);}});proc.once('exit',code=>reject(new Error(`Process exited ${code}: ${all.slice(-500)}`)));});}
-let nextId=1;const callbacks=new Map(),errors=[];
+let nextId=1,dialogDecision=true;const callbacks=new Map(),errors=[],dialogEvents=[];
 function send(method,params={}){return new Promise((resolve,reject)=>{const id=nextId++,timer=setTimeout(()=>{callbacks.delete(id);reject(new Error(`CDP timeout: ${method}`));},12000);callbacks.set(id,{resolve,reject,timer});socket.send(JSON.stringify({id,method,params}));});}
 async function evaluate(expression){const r=await send('Runtime.evaluate',{expression,awaitPromise:true,returnByValue:true});if(r.exceptionDetails)throw new Error(r.exceptionDetails.text+' '+JSON.stringify(r.exceptionDetails.exception));return r.result.value;}
-async function navigate(url){await send('Page.navigate',{url});await waitFor(()=>evaluate(`location.pathname===${JSON.stringify(new URL(url).pathname)} && document.readyState==='complete' && document.querySelector('#workspace-content .panel, #learning-content .panel, #learning-content .ref-page-head, #admin-dashboard-overview .bridge-teaching, #admin-course-picker, #accounts, #server-info, #admin-accounts, #notifications') && !document.querySelector('.student-loading')`));}
+async function navigate(url){const prior=await evaluate('performance.timeOrigin');await send('Page.navigate',{url});await waitFor(()=>evaluate(`performance.timeOrigin!==${prior} && location.pathname===${JSON.stringify(new URL(url).pathname)} && document.readyState==='complete' && document.querySelector('#workspace-content .panel, #learning-content .panel, #learning-content .ref-page-head, #admin-dashboard-overview .bridge-teaching, #admin-course-picker, #accounts, #server-info, #admin-accounts, #notifications') && !document.querySelector('.student-loading')`));}
 async function submit(selector,values){await evaluate(`(()=>{const f=document.querySelector(${JSON.stringify(selector)});f.dataset.qaSubmitted='true';${Object.entries(values).map(([key,value])=>`f.elements.namedItem(${JSON.stringify(key)}).value=${JSON.stringify(value)};`).join('')}f.requestSubmit();})()`);await waitFor(()=>evaluate(`!document.querySelector(${JSON.stringify(selector)})?.dataset.qaSubmitted`));}
 async function screenshot(name,captureBeyondViewport=true){const shot=await send('Page.captureScreenshot',{format:'png',captureBeyondViewport});fs.writeFileSync(path.join(out,name),Buffer.from(shot.data,'base64'));}
 async function panelScreenshot(selector,name){const clip=await evaluate(`(()=>{const r=document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();return {x:r.left+scrollX,y:r.top+scrollY,width:r.width,height:r.height,scale:1};})()`);const shot=await send('Page.captureScreenshot',{format:'png',captureBeyondViewport:true,clip});fs.writeFileSync(path.join(out,name),Buffer.from(shot.data,'base64'));}
@@ -72,6 +72,216 @@ async function sidebarFit(base,fixture,restoreMetrics={width:1440,height:1100,de
   console.log('PASS: every admin/student menu link visible and clickable without sidebar scrolling across 32 page/viewport combinations');
 }
 async function api(action,fields){return evaluate(`fetch('/api/learning/${action}',{method:'POST',body:new URLSearchParams(${JSON.stringify(fields)})}).then(async r=>({status:r.status,body:await r.json()}))`);}
+async function confirmPreflight(examId){
+  await waitFor(()=>evaluate("document.querySelector('.exam-preflight-dialog[open]')"));
+  const exam=await evaluate(`fetch('/api/admin/workspace').then(r=>r.json()).then(d=>d.exams.find(e=>e.id===${JSON.stringify(examId)}))`);
+  for(const [index,problem] of (exam.programming?.problems||[]).entries()){
+    const answers=Object.fromEntries(problem.tests.map(t=>[t.input,t.output]));
+    const source='import sys\nanswers = '+JSON.stringify(answers)+'\nsys.stdout.write(answers[sys.stdin.read()])\n';
+    await evaluate(`(()=>{const f=document.querySelector('[data-preflight-reference="${index}"]');f.elements.language.value='python';f.elements.source.value=${JSON.stringify(source)};f.requestSubmit();})()`);
+    await waitFor(()=>evaluate(`document.querySelector('[data-preflight-reference="${index}"] [data-preflight-result]').textContent.includes('AC ·')`),30000);
+  }
+  await waitFor(()=>evaluate("document.querySelector('[data-preflight-confirm]')?.disabled===false"));
+  if(process.argv.includes('--code-roster'))await panelScreenshot('.exam-preflight-dialog','exam-preflight-ready-desktop.png');
+  await evaluate("document.querySelector('[data-preflight-confirm]').click()");
+  await waitFor(()=>evaluate("!document.querySelector('.exam-preflight-dialog[open]')"));
+}
+async function scheduledTiming(base,fixture){
+  const adminPost=async(path,fields)=>{const r=await fetch(base+path,{method:'POST',headers:{Cookie:'css_session='+fixture.admin,Origin:base,'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(fields)});const body=await r.json();assert.equal(r.status,200,JSON.stringify(body));return body;};
+  await send('Network.setCookie',{name:'css_session',value:fixture.admin,url:base,httpOnly:true,sameSite:'Strict'});
+  const future=new Date(Date.now()+3600000).toISOString();
+  const created=await adminPost('/api/admin/exam-configurations/save',{type:'programming',course_id:fixture.course,title:'Thi lập trình theo lịch',scheduled_at:future,duration_minutes:'10',languages:'python',problems:JSON.stringify([{title:'Tổng hai số',statement:'Đề được giữ kín trước giờ thi',tests:[{input:'1 2',output:'3'}]}])});
+  await navigate(base+`/admin?section=exam&exam=${created.id}`);
+  await evaluate("document.querySelector('[data-code-control=start]').click()");
+  await confirmPreflight(created.id);
+  await waitFor(()=>evaluate("document.querySelector('[data-exam-timing-form]')"));
+  assert.equal(await evaluate("document.querySelector('[data-exam-timing-form] [name=scheduled_at]').disabled"),false);
+  const begins=new Date(Date.now()+8000).toISOString();
+  const local=new Date(Date.parse(begins)+7*3600000).toISOString().slice(0,19);
+  await submit('[data-exam-timing-form]',{scheduled_at:local,duration_minutes:'10'});
+  await send('Network.setCookie',{name:'css_session',value:fixture.student,url:base,httpOnly:true,sameSite:'Strict'});
+  await navigate(base+`/student/exams?exam=${created.id}`);
+  assert.equal(await evaluate("document.querySelector('[data-code-start]').disabled"),true);
+  assert.equal(await evaluate("document.querySelector('[data-code-editor],[data-code-problem]')===null"),true);
+  const denied=await fetch(base+'/api/student/programming/start',{method:'POST',headers:{Cookie:'css_session='+fixture.student,Origin:base,'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({exam_id:created.id})});assert.equal(denied.status,409);
+  await noOverflow();await panelScreenshot('[data-code-entry]','scheduled-code-waiting-desktop.png');
+  await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await noOverflow();await panelScreenshot('[data-code-entry]','scheduled-code-waiting-mobile.png');
+  await send('Emulation.setDeviceMetricsOverride',{width:1440,height:1100,deviceScaleFactor:1,mobile:false});
+  await waitFor(()=>evaluate("document.querySelector('[data-code-start]')?.disabled===false"),15000);
+  await evaluate("document.querySelector('[data-code-start]').click()");await waitFor(()=>evaluate("document.querySelector('[data-code-problem]')"));
+  await evaluate("document.querySelector('[data-code-problem]').click()");await waitFor(()=>evaluate("document.querySelector('[data-code-editor]')"));
+  await evaluate("window.timingEditor=document.querySelector('[data-code-editor]');timingEditor.value='print(3) # bản nháp đang viết';timingEditor.dispatchEvent(new Event('input',{bubbles:true}));");
+  const changed=await adminPost('/api/admin/exam-timing',{exam_id:created.id,duration_minutes:'20'});
+  await waitFor(()=>evaluate(`document.querySelector('[data-code-submit]').dataset.expiresAt===${JSON.stringify(changed.ends_at)}`),14000);
+  assert.equal(await evaluate("document.querySelector('[data-code-editor]')===timingEditor&&timingEditor.value==='print(3) # bản nháp đang viết'"),true);
+  await send('Network.setCookie',{name:'css_session',value:fixture.admin,url:base,httpOnly:true,sameSite:'Strict'});
+  await navigate(base+`/admin?section=exam&exam=${created.id}`);
+  assert.equal(await evaluate("document.querySelector('[data-exam-timing-form] [name=scheduled_at]').disabled"),true);
+  await submit('[data-exam-timing-form]',{duration_minutes:'15'});
+  await panelScreenshot('[data-exam-timing-form]','exam-live-time-edit.png');
+  const file=await adminPost('/api/admin/exam-configurations/save',{type:'file',title:'Thi file theo lịch',course_id:fixture.course,scheduled_at:future,duration_minutes:'10'});
+  await adminPost('/api/admin/exam-configurations/activate',{id:file.id});
+  await adminPost('/api/admin/distribute',{mode:'selected',exam_files:'timing-qa.txt'});
+  await navigate(base+`/admin?section=exam&exam=${file.id}`);
+  await evaluate("document.querySelector('#start-exam-admin').click()");await confirmPreflight(file.id);
+  await send('Network.setCookie',{name:'css_session',value:fixture.student,url:base,httpOnly:true,sameSite:'Strict'});
+  await navigate(base+'/student/exams?exam=file');
+  assert.equal(await evaluate("document.querySelector('[data-action=start-exam]')===null"),true);
+  assert.equal(await evaluate("document.querySelector('[data-exam-opens-at]')!==null"),true);
+  assert.equal(await evaluate("document.body.textContent.includes('Private file exam question')"),false);
+  await adminPost('/api/admin/exam-timing',{exam_id:file.id,scheduled_at:new Date(Date.now()-60000).toISOString(),duration_minutes:'10'});
+  await waitFor(()=>evaluate("document.querySelector('[data-action=start-exam]')"),14000);
+  assert.deepEqual(errors,[],'Scheduled exam JavaScript/CSP errors');
+  console.log('PASS: scheduled code/file publish and early-entry lock, automatic opening at the planned time, waiting/live time editing and preserved student editor');
+}
+async function teacherDrafts(base,fixture){
+  await send('Network.setCookie',{name:'css_session',value:fixture.admin,url:base,httpOnly:true,sameSite:'Strict'});
+  await navigate(base+'/admin?section=exam');
+  const created=await evaluate(`window.cssRequest('/api/admin/exam-configurations/save',{method:'POST',body:new URLSearchParams({type:'programming',title:'Bản lưu trên máy chủ',languages:'python',problems:JSON.stringify([{title:'Bài đã lưu',tests:[{input:'1 2',output:'3'}]}])})})`);
+  await navigate(base+`/admin?section=exam&exam=${created.id}`);
+  await waitFor(()=>evaluate("window.adminDrafts&&document.querySelector('#exam-config-form [data-admin-draft-status]')"));
+  await evaluate("(()=>{document.querySelector('[data-problem-statement]').value='Đề đang soạn · giữ nguyên dấu tiếng Việt';document.querySelector('[data-problem-statement]').dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('[data-problem-add]').click();const p=document.querySelectorAll('[data-program-problem]')[1];p.querySelector('[data-problem-title]').value='Bài mới chưa lưu';p.querySelector('[data-test-add]').click();p.querySelector('[data-test-input]').value='  5\\n 6  ';p.querySelector('[data-test-output]').value='11';p.querySelector('[data-test-output]').dispatchEvent(new Event('input',{bubbles:true}));})()");
+  await waitFor(()=>evaluate("document.querySelector('#exam-config-form [data-admin-draft-status]').textContent.includes('Chưa lưu')"));
+  dialogDecision=false;
+  assert.equal(await evaluate("window.adminDrafts.dirty()"),true,'Draft must be dirty before navigation');
+  await evaluate("document.querySelector('.sidebar-nav a[href*=notifications]').click()");
+  if(await evaluate("new URLSearchParams(location.search).get('exam')")!==created.id)console.error('Draft guard diagnostics',JSON.stringify({dialogEvents,errors}));
+  assert.equal(await evaluate("new URLSearchParams(location.search).get('exam')"),created.id);
+  assert(dialogEvents.includes('confirm'));
+  dialogDecision=true;
+  await navigate(base+'/admin?section=notifications');
+  await navigate(base+`/admin?section=exam&exam=${created.id}`);
+  await waitFor(()=>evaluate("document.querySelector('#exam-config-form [data-draft-restore]')?.hidden===false"));
+  assert.equal(await evaluate("document.querySelectorAll('[data-program-problem]').length"),1);
+  await evaluate("document.querySelector('#exam-config-form [data-draft-restore]').click()");
+  assert.equal(await evaluate("document.querySelectorAll('[data-program-problem]').length"),2);
+  assert.equal(await evaluate("document.querySelector('[data-problem-statement]').value"),'Đề đang soạn · giữ nguyên dấu tiếng Việt');
+  assert.equal(await evaluate("document.querySelectorAll('[data-program-problem]')[1].querySelector('[data-test-input]').value"),'  5\n 6  ');
+  await panelScreenshot('#exam-config-form','teacher-exam-draft-restored.png');
+  await navigate(base+'/admin?section=notifications');
+  await waitFor(()=>evaluate("window.notificationDraft&&document.querySelector('#notification-form [data-admin-draft-status]')"));
+  await evaluate("(()=>{const f=document.querySelector('#notification-form');f.elements.message.value='Thông báo đang soạn, chưa gửi';f.elements.message.dispatchEvent(new Event('input',{bubbles:true}));})()");
+  await navigate(base+'/admin?section=accounts');
+  await navigate(base+'/admin?section=notifications');
+  await waitFor(()=>evaluate("document.querySelector('#notification-form [data-draft-restore]')?.hidden===false"));
+  assert.equal(await evaluate("document.querySelector('#notification-message').value"),'');
+  await evaluate("document.querySelector('#notification-form [data-draft-restore]').click()");
+  assert.equal(await evaluate("document.querySelector('#notification-message').value"),'Thông báo đang soạn, chưa gửi');
+  await evaluate("document.querySelector('#notification-form').requestSubmit()");
+  await waitFor(()=>evaluate("document.querySelector('#notification-result').textContent.includes('thành công')"));
+  await navigate(base+'/admin?section=notifications');
+  await waitFor(()=>evaluate("document.querySelector('#notification-form [data-admin-draft-status]')"));
+  assert.equal(await evaluate("document.querySelector('#notification-form [data-admin-draft-status]').hidden"),true);
+  await navigate(base+`/admin/courses?course=${fixture.course}&tab=assignments`);
+  await evaluate("document.querySelector('[data-tab=assignment]').click()");
+  await waitFor(()=>evaluate("document.querySelector('[data-action=assignment] [data-admin-draft-status]')"));
+  await evaluate("(()=>{const f=document.querySelector('[data-action=assignment]');f.elements.title.value='Bài tập chưa lưu';f.elements.description.value='Nháp yêu cầu';f.elements.due_at.value='2000-01-01T10:00';const files=new DataTransfer();files.items.add(new File(['example'],'draft.txt',{type:'text/plain'}));f.elements.file.files=files.files;f.elements.description.dispatchEvent(new Event('input',{bubbles:true}));f.requestSubmit();})()");
+  await waitFor(()=>evaluate("document.querySelector('#learning-error').textContent.includes('tương lai')"));
+  assert.equal(await evaluate("document.querySelector('[data-action=assignment] [data-admin-draft-status]').hidden"),false);
+  await navigate(base+'/admin?section=accounts');
+  await navigate(base+`/admin/courses?course=${fixture.course}&tab=assignment`);
+  await waitFor(()=>evaluate("document.querySelector('[data-action=assignment] [data-draft-restore]')?.hidden===false"));
+  assert.equal(await evaluate("document.querySelector('[data-action=assignment] [data-admin-draft-status]').textContent.includes('chọn lại')"),true);
+  await evaluate("document.querySelector('[data-action=assignment] [data-draft-restore]').click()");
+  assert.equal(await evaluate("document.querySelector('[data-action=assignment] [name=description]').value"),'Nháp yêu cầu');
+  assert.equal(await evaluate("document.querySelector('[data-action=assignment] [name=file]').files.length"),0);
+  assert.equal(await evaluate("[...localStorage.keys?.()||[]].some(k=>k.includes('password'))"),false);
+  assert.deepEqual(errors,[],'Teacher draft JavaScript/CSP errors');
+  console.log('PASS: teacher exam/test-case recovery, cancelled navigation, notification save clearing, failed-save retention and explicit binary-file reselection');
+}
+async function enrollmentFlow(base,fixture){
+  await send('Network.setCookie',{name:'css_session',value:fixture.admin,url:base,httpOnly:true,sameSite:'Strict'});
+  await navigate(base+`/admin/courses?course=${fixture.course}&tab=students`);
+  await evaluate("document.querySelector('[data-member-add]').click()");
+  assert.equal(await evaluate("document.querySelector('[name=include_previous]').value"),'false');
+  await submit('dialog [data-action=course-members]',{add_student_id:'QAEMPTY'});
+  await waitFor(()=>evaluate("document.querySelector('[data-member-remove=QAEMPTY]')"));
+  const member=await evaluate("document.querySelector('[data-member-remove=QAEMPTY]').closest('tr').textContent");
+  assert(member.includes('Tính từ lúc tham gia'));
+  await noOverflow();await panelScreenshot('.course-members','enrollment-members-desktop.png');
+  await navigate(base+`/admin/courses?course=${fixture.course}&tab=attendance&session=${fixture.attendance}`);
+  const adminRow=await evaluate("[...document.querySelectorAll('.attendance-detail-table tbody tr')].find(r=>r.textContent.includes('QAEMPTY')).textContent");
+  assert(adminRow.includes('Không tính điểm'));assert(!adminRow.includes('Vắng'));
+  await send('Network.setCookie',{name:'css_session',value:fixture.empty,url:base,httpOnly:true,sameSite:'Strict'});
+  await navigate(base+`/student/assignments?course=${fixture.course}`);
+  const work=await evaluate("document.querySelector('.student-compact-table tbody tr').textContent");
+  assert(work.includes('Không tính điểm'));assert(!work.includes('Quá hạn'));
+  await evaluate("document.querySelector('[data-learning-detail=assignment]').click()");
+  await waitFor(()=>evaluate("document.querySelector('.student-detail-dialog[open]')"));
+  assert.equal(await evaluate("document.querySelector('.student-detail-dialog').textContent.includes('không tính vào điểm tự động')"),true);
+  await navigate(base+`/student/attendance?course=${fixture.course}`);
+  assert.equal(await evaluate(`document.querySelector('[data-learning-row=attendance][data-item="${fixture.attendance}"]').textContent.includes('Không tính điểm')`),true);
+  await navigate(base+`/student/grades?course=${fixture.course}`);
+  const own=await evaluate("fetch('/api/student/workspace').then(r=>r.json())");
+  const book=own.gradebooks.find(b=>b.course_id===fixture.course).items[0];
+  assert.equal(book.homework,null);assert.equal(book.attendance,10);assert.equal(book.excluded_assignments,1);assert.equal(book.excluded_attendance,1);
+  assert.equal(Object.hasOwn(own.courses.find(c=>c.id===fixture.course),'enrollments'),false);
+  await noOverflow();await panelScreenshot('[data-student-assignment-grades]','enrollment-grades-desktop.png');
+  await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
+  await navigate(base+`/student/assignments?course=${fixture.course}`);await noOverflow();await screenshot('enrollment-student-mobile.png');
+  await send('Emulation.setDeviceMetricsOverride',{width:1440,height:1100,deviceScaleFactor:1,mobile:false});
+  await send('Network.setCookie',{name:'css_session',value:fixture.admin,url:base,httpOnly:true,sameSite:'Strict'});
+  const created=await api('course',{name:'Tính cả nội dung cũ',code:'INCLUDE',semester:'2026',student_ids:'QA001'});
+  assert.equal(created.status,200);
+  await navigate(base+`/admin/courses?course=${created.body.id}&tab=students`);
+  await evaluate("document.querySelector('[data-members-import]').click()");
+  await submit('dialog [data-action=course-members]',{append_ids:'QAEMPTY',include_previous:'true'});
+  await waitFor(()=>evaluate("document.querySelector('[data-member-remove=QAEMPTY]')"));
+  assert.equal(await evaluate("document.querySelector('[data-member-remove=QAEMPTY]').closest('tr').textContent.includes('Tính cả nội dung trước khi tham gia')"),true);
+  assert.deepEqual(errors,[],'Enrollment JavaScript/CSP errors');
+  console.log('PASS: late enrollment default and include-previous controls, exempt homework/attendance/gradebook, privacy and desktop/mobile views');
+}
+async function codeEntry(base,fixture){
+  await send('Network.setCookie',{name:'css_session',value:fixture.admin,url:base,httpOnly:true,sameSite:'Strict'});
+  await navigate(base+'/admin?section=exam');
+  const spec={type:'programming',title:'Thi lập trình · Đồng hồ chung',course_id:fixture.course,duration_minutes:'10',languages:'python',problems:JSON.stringify([{title:'Tổng hai số',statement:'Đề chỉ hiển thị sau khi vào làm bài',tests:[{input:'1 2',output:'3',sample:true},{input:'91 8',output:'99',sample:false}]}])};
+  const {id}=await evaluate(`window.cssRequest('/api/admin/exam-configurations/save',{method:'POST',body:new URLSearchParams(${JSON.stringify(spec)})})`);
+  await evaluate(`window.cssRequest('/api/admin/programming/control',{method:'POST',body:new URLSearchParams({exam_id:'${id}',action:'start'})})`);
+  await send('Network.setCookie',{name:'css_session',value:fixture.student,url:base,httpOnly:true,sameSite:'Strict'});
+  await navigate(base+`/student/exams?exam=${id}`);
+  await waitFor(()=>evaluate("document.querySelector('[data-code-entry] [data-deadline-countdown]')?.textContent!=='--:--'"));
+  const before=await evaluate(`fetch('/api/student/workspace').then(r=>r.json()).then(d=>d.programming.exams.find(e=>e.id==='${id}'))`);
+  assert.equal(before.attempt,null);assert.deepEqual(before.problems,[]);
+  assert.equal(await evaluate("document.querySelector('[data-code-start]').textContent.trim()"),'Vào làm bài');
+  assert.deepEqual(await evaluate("[...document.querySelectorAll('[data-code-entry] time')].map(n=>n.dateTime)"),[before.started_at,before.ends_at]);
+  assert.equal(await evaluate("document.querySelector('[data-code-entry]').textContent.includes('không bắt đầu lại đồng hồ')"),true);
+  assert.equal(await evaluate("document.querySelector('[data-code-editor],[data-code-problem]')===null"),true);
+  const first=await evaluate("document.querySelector('[data-code-entry] [data-deadline-countdown]').textContent");
+  await waitFor(()=>evaluate(`document.querySelector('[data-code-entry] [data-deadline-countdown]').textContent!==${JSON.stringify(first)}`),3000);
+  await noOverflow();await panelScreenshot('[data-code-problem-list]','code-entry-desktop.png');
+  await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
+  await noOverflow();await panelScreenshot('[data-code-problem-list]','code-entry-mobile.png');
+  // Boundary UI uses the same server-synchronized clock as submissions.
+  await evaluate(`window.submissionDeadlines.sync(${JSON.stringify(new Date(Date.parse(before.ends_at)+1000).toISOString())})`);
+  assert.equal(await evaluate("document.querySelector('[data-code-start]').disabled"),true);
+  assert.equal(await evaluate("document.querySelector('[data-code-entry] [data-deadline-countdown]').textContent"),'Hết giờ');
+  await evaluate("document.querySelector('[data-code-start]').click()");
+  assert.equal(await evaluate(`fetch('/api/student/workspace').then(r=>r.json()).then(d=>d.programming.exams.find(e=>e.id==='${id}').attempt)`),null);
+  await navigate(base+`/student/exams?exam=${id}`);
+  await evaluate("document.querySelector('[data-code-start]').click()");
+  await waitFor(()=>evaluate("document.querySelector('[data-code-problem]')"));
+  const after=await evaluate(`fetch('/api/student/workspace').then(r=>r.json()).then(d=>d.programming.exams.find(e=>e.id==='${id}'))`);
+  assert.equal(after.ends_at,before.ends_at);assert.equal(after.attempt.ends_at,before.ends_at);
+  assert(Date.parse(after.attempt.started_at)>Date.parse(before.started_at));
+  assert.equal(await evaluate("document.querySelector('[data-code-entry]')===null"),true);
+  await evaluate("document.querySelector('[data-code-problem]').click()");
+  await waitFor(()=>evaluate("document.querySelector('[data-code-editor]')"));
+  assert.equal(await evaluate("document.querySelector('.code-statement').textContent.includes('Đề chỉ hiển thị sau khi vào làm bài')"),true);
+  assert.equal(await evaluate("document.querySelector('.code-statement').textContent.includes('91 8')"),false);
+  await send('Network.setCookie',{name:'css_session',value:fixture.admin,url:base,httpOnly:true,sameSite:'Strict'});
+  await evaluate(`window.cssRequest('/api/admin/programming/control',{method:'POST',body:new URLSearchParams({exam_id:'${id}',action:'end'})})`);
+  const closed=await evaluate(`window.cssRequest('/api/admin/exam-configurations/save',{method:'POST',body:new URLSearchParams(${JSON.stringify({...spec,title:'Phòng thi kết thúc sớm'})})})`);
+  await evaluate(`window.cssRequest('/api/admin/programming/control',{method:'POST',body:new URLSearchParams({exam_id:'${closed.id}',action:'start'})}).then(()=>window.cssRequest('/api/admin/programming/control',{method:'POST',body:new URLSearchParams({exam_id:'${closed.id}',action:'end'})}))`);
+  await send('Network.setCookie',{name:'css_session',value:fixture.student,url:base,httpOnly:true,sameSite:'Strict'});
+  await navigate(base+`/student/exams?exam=${closed.id}`);
+  assert.equal(await evaluate("document.querySelector('[data-code-entry] .code-entry-remaining').textContent.includes('Đã kết thúc')"),true);
+  assert.equal(await evaluate("document.querySelector('[data-code-entry] [data-deadline-countdown],[data-code-start]')===null"),true);
+  await send('Network.setCookie',{name:'css_session',value:fixture.empty,url:base,httpOnly:true,sameSite:'Strict'});
+  await navigate(base+`/student/exams?exam=${id}`);
+  assert.equal(await evaluate("document.querySelector('[data-code-entry],[data-code-start],[data-code-editor]')===null"),true);
+  assert.deepEqual(errors,[],'Code entry JavaScript/CSP errors');
+  console.log('PASS: shared exam times, live countdown, desktop/mobile entry, expiry lock, hidden questions and unchanged common deadline after entering');
+}
 async function codeRoster(base,fixture){
   await send('Network.setCookie',{name:'css_session',value:fixture.admin,url:base,httpOnly:true,sameSite:'Strict'});
   await navigate(base+'/admin?section=exam');
@@ -124,6 +334,7 @@ async function codeRoster(base,fixture){
   assert.equal(await evaluate("fetch('/api/admin/accounts').then(r=>r.json()).then(d=>d.students.some(s=>s.student_id==='OUTSIDER'))"),false);
   await navigate(base+`/admin?section=exam&exam=${id}`);
   await evaluate("document.querySelector('[data-code-participant][value=ROSTER01]').click();document.querySelector('[data-code-control=start]').click()");
+  await confirmPreflight(id);
   await waitFor(()=>evaluate("!!document.querySelector('[data-code-control=end]')"));
   assert.deepEqual(await evaluate("[...document.querySelectorAll('[data-code-participant]:checked')].map(n=>n.value)"),['QA001']);
   assert.equal(await evaluate("[...document.querySelectorAll('[data-code-participant]')].every(n=>n.disabled)"),true);
@@ -136,7 +347,7 @@ async function codeRoster(base,fixture){
 }
 (async()=>{
   fs.mkdirSync(out,{recursive:true});
-  app=spawn(python,['-u',path.join(__dirname,'serve_student_qa.py')],{cwd:root,windowsHide:true,stdio:['ignore','pipe','pipe'],env:{...process.env,CSS_ROSTER_QA:process.argv.includes('--code-roster')?'1':''}});
+  app=spawn(python,['-u',path.join(__dirname,'serve_student_qa.py')],{cwd:root,windowsHide:true,stdio:['ignore','pipe','pipe'],env:{...process.env,CSS_ROSTER_QA:['--code-roster','--code-entry','--timing'].some(flag=>process.argv.includes(flag))?'1':'',CSS_ENROLLMENT_QA:process.argv.includes('--enrollment')?'1':'',CSS_TIMING_QA:process.argv.includes('--timing')?'1':''}});
   const fixture=JSON.parse(await readyProcess(app,'stdout',/QA_READY ([^\r\n]+)/));
   const base=`http://127.0.0.1:${fixture.port}`;
   browser=spawn(chrome,['--headless=new','--disable-gpu','--no-first-run','--no-default-browser-check','--use-fake-ui-for-media-stream','--use-fake-device-for-media-stream',`--use-file-for-fake-video-capture=${cameraPath}`,'--remote-debugging-port=0',`--user-data-dir=${profile}`,'about:blank'],{windowsHide:true,stdio:['ignore','ignore','pipe']});
@@ -144,12 +355,16 @@ async function codeRoster(base,fixture){
   const port=new URL(browserWs).port;
   const target=await (await fetch(`http://127.0.0.1:${port}/json/new?about:blank`,{method:'PUT'})).json();
   socket=new WebSocket(target.webSocketDebuggerUrl);await new Promise((r,j)=>{socket.addEventListener('open',r,{once:true});socket.addEventListener('error',j,{once:true});});
-  socket.addEventListener('message',event=>{const msg=JSON.parse(event.data);if(msg.id){const p=callbacks.get(msg.id);if(!p)return;clearTimeout(p.timer);callbacks.delete(msg.id);if(msg.error)p.reject(new Error(JSON.stringify(msg.error)));else p.resolve(msg.result);}if(msg.method==='Runtime.exceptionThrown')errors.push(msg.params.exceptionDetails);if(msg.method==='Log.entryAdded'&&msg.params.entry.source==='security')errors.push(msg.params.entry);});
+  socket.addEventListener('message',event=>{const msg=JSON.parse(event.data);if(msg.id){const p=callbacks.get(msg.id);if(!p)return;clearTimeout(p.timer);callbacks.delete(msg.id);if(msg.error)p.reject(new Error(JSON.stringify(msg.error)));else p.resolve(msg.result);}if(msg.method==='Page.javascriptDialogOpening'){dialogEvents.push(msg.params.type);void send('Page.handleJavaScriptDialog',{accept:dialogDecision});}if(msg.method==='Runtime.exceptionThrown')errors.push(msg.params.exceptionDetails);if(msg.method==='Log.entryAdded'&&msg.params.entry.source==='security')errors.push(msg.params.entry);});
   await send('Page.enable');await send('Runtime.enable');await send('Log.enable');await send('Network.enable');
   await send('Network.setCookie',{name:'css_session',value:fixture.student,url:base,httpOnly:true,sameSite:'Strict'});
   await send('Emulation.setDeviceMetricsOverride',{width:1440,height:1100,deviceScaleFactor:1,mobile:false});
   if(process.argv.includes('--sidebar')){await sidebarFit(base,fixture);assert.deepEqual(errors,[],'Sidebar browser JavaScript errors');return;}
   if(process.argv.includes('--code-roster')){await codeRoster(base,fixture);return;}
+  if(process.argv.includes('--code-entry')){await codeEntry(base,fixture);return;}
+  if(process.argv.includes('--enrollment')){await enrollmentFlow(base,fixture);return;}
+  if(process.argv.includes('--drafts')){await teacherDrafts(base,fixture);return;}
+  if(process.argv.includes('--timing')){await scheduledTiming(base,fixture);return;}
   await navigate(base+'/student/dashboard');
   assert.equal(await evaluate("document.querySelector('#student-nav [data-view=dashboard]').textContent.trim()"),'Dashboard');
   await waitFor(()=>evaluate("document.querySelector('.student-hero')?.textContent.includes('Nguyễn Minh Anh')"));
@@ -458,6 +673,7 @@ async function codeRoster(base,fixture){
   if(process.env.CSS_JUDGE_TESTS==='1'){
     await evaluate("(()=>{document.querySelector('[name=language][value=python]').checked=true;const p=document.querySelector('[data-program-problem]');p.querySelector('[data-test-add]').click();const t=p.querySelectorAll('[data-program-test]')[1];t.querySelector('[data-test-input]').value='100 200';t.querySelector('[data-test-output]').value='300';})()");
     await evaluate("document.querySelector('[data-code-control=start]').click()");
+    await confirmPreflight(programmingId);
     await waitFor(()=>evaluate("document.querySelector('[data-code-control=end]')"));
     assert.equal(await evaluate("document.querySelector('.exam-form-fields').disabled"),true);
     await send('Network.setCookie',{name:'css_session',value:fixture.student,url:base,httpOnly:true,sameSite:'Strict'});
@@ -560,7 +776,9 @@ async function codeRoster(base,fixture){
   if(process.env.CSS_JUDGE_TESTS==='1'){
     await evaluate("document.querySelector('#distribution-form').requestSubmit()");
     await waitFor(()=>evaluate("document.querySelector('#distribution-result').textContent.includes('Đã phát đề')"));
+    await evaluate("window.cssRequest('/api/admin/exam-timing',{method:'POST',body:new URLSearchParams({exam_id:new URLSearchParams(location.search).get('exam'),scheduled_at:new Date(Date.now()-60000).toISOString(),duration_minutes:'60'})})");
     await evaluate("document.querySelector('#start-exam-admin').click()");
+    await confirmPreflight(new URL(await evaluate("location.href")).searchParams.get("exam"));
     await waitFor(()=>evaluate("document.querySelector('#end-exam')?.disabled===false"));
     await send('Network.setCookie',{name:'css_session',value:fixture.student,url:base,httpOnly:true,sameSite:'Strict'});
     await navigate(base+'/student/exams');
@@ -810,8 +1028,7 @@ async function codeRoster(base,fixture){
   console.log('Screenshots: previews/student-qa');
 })().catch(async e=>{console.error(e);if(socket){try{console.error(await evaluate("JSON.stringify({url:location.href,error:document.querySelector('#workspace-error, #learning-error')?.textContent,body:document.body.innerText.slice(-1000)})"));await screenshot('failure.png');}catch(_){}}process.exitCode=1;}).finally(async()=>{
   if(socket)socket.close();
-  if(browser)browser.kill();
-  if(app)app.kill();
+  for(const proc of [browser,app])if(proc&&proc.exitCode===null&&proc.signalCode===null){if(process.platform==='win32')spawnSync('taskkill.exe',['/PID',String(proc.pid),'/T','/F'],{windowsHide:true,stdio:'ignore'});else proc.kill();}
   await delay(500);
   try{if(path.dirname(path.resolve(profile))===path.resolve(os.tmpdir())&&path.basename(profile).startsWith('classroom-chrome-'))fs.rmSync(profile,{recursive:true,force:true});}catch(_){}
 });

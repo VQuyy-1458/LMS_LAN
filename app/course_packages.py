@@ -68,6 +68,7 @@ def import_course(file, session, ip):
         raise learning.LearningError(400, "Trọng số điểm trong gói không hợp lệ.")
     course = {"id": cid, "created_at": now, "created_by": session["user_id"], "name": field(source, "name"), "code": field(source, "code", 80), "group": field(source, "group", 80, False), "semester": field(source, "semester", 80), "description": field(source, "description", 10000, False), "student_ids": [], "status": "active"}
     course["weights"] = dict(weights)
+    learning.enrollments.initialize(course, {}, now)
     staged = {"materials": [], "events": [], "assignments": []}
     total = 0
     for row in package.get("materials", []):

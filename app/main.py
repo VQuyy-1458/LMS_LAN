@@ -41,7 +41,7 @@ from . import learning
 from . import notifications as student_notifications
 from . import admin_workspace, exam_catalog, programming, submission_rate, code_runner
 from . import course_packages
-from . import submission_archive, deadlines
+from . import submission_archive, deadlines, exam_preflight, exam_timing
 from .security import login_state
 
 TEMPLATES = Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)), autoescape=select_autoescape(["html", "xml"]))
@@ -81,6 +81,8 @@ def student_exam_snapshot(student_id):
     settings=read_json("settings.json"); item=current_exam_for(student_id)
     current=bool(item and item.get("release_id")==settings.get("exam_release_id"))
     active=current and settings.get("exam_state")=="started" and settings.get("exam_released")
+    waiting = exam_timing.waiting(settings.get("exam_state"), settings.get("exam_started_at"))
+    active = active and not waiting
     started=bool(current and item.get("started_at"))
     remaining=remaining_seconds(item) if started else None
     common_end=deadlines.exam_end(settings.get("exam_started_at"),settings.get("exam_duration_minutes"),settings.get("exam_ends_at")) if settings.get("exam_state") in {"started","ended"} else None
@@ -88,7 +90,7 @@ def student_exam_snapshot(student_id):
     records=[r for r in read_json("submissions.json").get(student_id,[]) if current and r.get("release_id")==item.get("release_id")]
     limit=1 if settings.get("submission_policy")=="once" else int(settings.get("max_submissions",1))
     forced=bool(current and item.get("forced_submit"))
-    return {"state":settings.get("exam_state","idle"),"assigned":current,"started":started,"status":item.get("status") if current else "not_assigned","exam_file":item.get("exam_file") if started else None,"started_at":item.get("started_at") if started else None,"ends_at":item.get("ends_at") if started else None,"remaining_seconds":remaining,"can_start":bool(active and not started and not forced and item.get("status")=="assigned"),"can_submit":bool(active and started and remaining>0 and not forced and len(records)<limit),"forced_submit":forced,"submission_count":len(records),"max_submissions":limit,"duration_minutes":settings.get("exam_duration_minutes",90),"password_enabled":settings.get("exam_password_enabled",False),"extensions":settings.get("accepted_submission_extensions",[".zip"]),"course_id":settings.get("exam_course_id") if current else None,"title":(settings.get("exam_title") or "Kỳ thi nộp file") if current else "Kỳ thi nộp file"}
+    return {"state":"scheduled" if waiting else settings.get("exam_state","idle"),"common_starts_at":settings.get("exam_started_at"),"assigned":current,"started":started,"status":item.get("status") if current else "not_assigned","exam_file":item.get("exam_file") if started else None,"started_at":item.get("started_at") if started else None,"ends_at":item.get("ends_at") if started else None,"remaining_seconds":remaining,"can_start":bool(active and not started and not forced and item.get("status")=="assigned"),"can_submit":bool(active and started and remaining>0 and not forced and len(records)<limit),"forced_submit":forced,"submission_count":len(records),"max_submissions":limit,"duration_minutes":settings.get("exam_duration_minutes",90),"password_enabled":settings.get("exam_password_enabled",False),"extensions":settings.get("accepted_submission_extensions",[".zip"]),"course_id":settings.get("exam_course_id") if current else None,"title":(settings.get("exam_title") or "Kỳ thi nộp file") if current else "Kỳ thi nộp file"}
 
 
 def monitoring_snapshot(course_id="") -> dict:
@@ -314,6 +316,9 @@ class Handler(BaseHTTPRequestHandler):
             if path=="/api/admin/programming/status":
                 self._auth(req,"admin")
                 return self._json(code_runner.status())
+            if path=="/api/admin/exam-preflight":
+                self._auth(req,"admin")
+                return self._json(exam_preflight.review(req.query.get("exam",[""])[0]))
             if path=="/api/admin/programming/submissions":
                 self._auth(req,"admin")
                 exam_id=req.query.get("exam", [""])[0]
@@ -354,7 +359,7 @@ class Handler(BaseHTTPRequestHandler):
                 allowed={"dashboard","courses","monitor","notifications","exam","accounts","submissions","server","admins"}
                 if section not in allowed: section="dashboard"
                 selected_exam = next((r for r in exam_catalog.listing() if r["id"] == req.query.get("exam", [""])[0]), None) if section == "exam" else None
-                return self._html(self._render("admin.html",session=sess,section=section,exam_engine_detail=bool(selected_exam and selected_exam["type"] == "file" and selected_exam["active"]),exam_files=list_exam_files(),settings=read_json("settings.json"),monitoring=monitoring_snapshot(),course_count=len(learning.load()["courses"])))
+                return self._html(self._render("admin.html",session=sess,section=section,exam_engine_detail=bool(selected_exam and selected_exam["type"] == "file" and selected_exam["active"]),exam_files=list_exam_files(),settings={**read_json("settings.json"), **({"exam_state":"scheduled"} if exam_timing.waiting(read_json("settings.json").get("exam_state"),read_json("settings.json").get("exam_started_at")) else {})},monitoring=monitoring_snapshot(),course_count=len(learning.load()["courses"])))
             if path=="/admin/accounts-template.txt":
                 self._auth(req,"admin")
                 content="21010001|01/02/2003|Nguyen Van A\n21010002|15/08/2003|Tran Thi B\n"
@@ -441,6 +446,11 @@ class Handler(BaseHTTPRequestHandler):
             if admin_request:
                 self._auth(req, "admin", touch=False)
             body, req = self._parse_body()
+            if req.path == "/api/admin/exam-preflight/verify":
+                sess = self._auth(req, "admin")
+                return self._json(exam_preflight.verify_reference(sess, req.form, client_ip(req)))
+            if req.path == "/api/admin/exam-preflight/open":
+                req.preflight_runner = code_runner.status() if req.form.get("type") == "programming" else None
             if req.path == "/api/admin/programming/control" and req.form.get("action") == "start":
                 req.judge_ready = code_runner.ready()
             if not admin_request:
@@ -579,6 +589,12 @@ class Handler(BaseHTTPRequestHandler):
             if path=="/api/admin/exam-configurations/save":
                 sess=self._auth(req,"admin")
                 return self._json(exam_catalog.save(sess,f,client_ip(req)))
+            if path=="/api/admin/exam-preflight/open":
+                sess=self._auth(req,"admin")
+                return self._json(exam_preflight.open_checked(sess,f,client_ip(req),getattr(req,"preflight_runner",None)))
+            if path=="/api/admin/exam-timing":
+                sess=self._auth(req,"admin")
+                return self._json(exam_timing.update(sess,f,client_ip(req)))
             if path=="/api/admin/exam-configurations/activate":
                 sess=self._auth(req,"admin")
                 return self._json(exam_catalog.activate(sess,f,client_ip(req)))
@@ -794,6 +810,7 @@ def main():
 
 def _serve():
     initialize()
+    learning.initialize_enrollments()
     for directory in (EXAM_DIR,UPLOAD_DIR):
         directory.mkdir(parents=True,exist_ok=True)
     cert,key=os.getenv("CSS_TLS_CERT"),os.getenv("CSS_TLS_KEY")

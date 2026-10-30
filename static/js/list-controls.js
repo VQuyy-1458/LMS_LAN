@@ -42,7 +42,7 @@
     problems:{fields:[field('index','Thứ tự bài',r=>r.index),named,field('points','Điểm tối đa',r=>r.points),field('score','Điểm tốt nhất',r=>r.best_score)],defaultSort:'index',status:r=>r.verdict||'none',statuses:[['none','Chưa nộp'],['queued','Đang chờ chấm'],['running','Đang chấm'],...['AC','WA','CE','RE','TLE','MLE','OLE','SYSTEM_ERROR'].map(v=>[v,v])]},
     history:{fields:[when,field('attempt','Lần chấm / lần nộp',r=>r.attempt),field('score','Điểm',r=>r.score??r.result?.score),field('by','Người chấm A–Z',r=>r.graded_by||r.requested_by),named],defaultSort:'time',statuses:[]}
   };
-  schemas.attendancePeople={...schemas.people,status:r=>r.attendance_status,statuses:[['present','Có mặt'],['late','Đến muộn'],['unrecorded','Chưa điểm danh'],['absent','Vắng']],fields:[...schemas.people.fields.filter(f=>!['status','ip','time'].includes(f.key)),field('status','Trạng thái điểm danh',r=>({present:0,late:1,unrecorded:2,absent:3})[r.attendance_status]),field('time','Thời gian điểm danh',r=>date(r.checked_in_at))]};
+  schemas.attendancePeople={...schemas.people,status:r=>r.attendance_status,statuses:[['present','Có mặt'],['late','Đến muộn'],['unrecorded','Chưa điểm danh'],['absent','Vắng'],['excluded','Không tính điểm']],fields:[...schemas.people.fields.filter(f=>!['status','ip','time'].includes(f.key)),field('status','Trạng thái điểm danh',r=>({present:0,late:1,unrecorded:2,absent:3,excluded:4})[r.attendance_status]),field('time','Thời gian điểm danh',r=>date(r.checked_in_at))]};
   const policies={
     people:{filterLabel:'Trạng thái tài khoản',placeholder:'Tìm MSSV hoặc họ tên…',directionLabel:'Thứ tự MSSV / tài khoản'},
     monitor:{filterLabel:'Đăng nhập',placeholder:'Tìm MSSV, họ tên hoặc IP…',directionLabel:'Thứ tự MSSV'},

@@ -156,6 +156,9 @@ def start_exam(student_id: str, supplied_password: str | None = None, ip: str | 
     settings = read_json("settings.json")
     if settings.get("exam_state") != "started":
         raise ValueError("Giảng viên chưa bắt đầu kỳ thi.")
+    from .exam_timing import waiting
+    if waiting(settings.get("exam_state"), settings.get("exam_started_at"), datetime.now(timezone.utc)):
+        raise ValueError("Chưa đến giờ bắt đầu dự kiến của kỳ thi.")
     from .deadlines import exam_end
     common_end = exam_end(settings.get("exam_started_at"), settings.get("exam_duration_minutes"), settings.get("exam_ends_at"))
     if common_end and common_end <= datetime.now(timezone.utc):
@@ -190,7 +193,11 @@ def start_exam_session() -> dict:
     if settings.get("exam_state") != "distributed":
         raise ValueError("Cần phân phối đề trước khi bắt đầu kỳ thi.")
     now = datetime.now(timezone.utc)
-    settings.update({"exam_state": "started", "exam_released": True, "exam_started_at": now.isoformat(), "exam_ends_at": (now + timedelta(minutes=int(settings.get("exam_duration_minutes",90)))).isoformat(), "exam_closed_automatically": False})
+    from .exam_timing import window
+    begins, ends = window(settings.get("exam_scheduled_at"), settings.get("exam_duration_minutes",90), now)
+    if ends <= now:
+        raise ValueError("Lịch thi đã hết thời gian. Hãy điều chỉnh giờ bắt đầu trước khi mở.")
+    settings.update({"exam_state": "started", "exam_released": True, "exam_started_at": begins.isoformat(), "exam_ends_at": ends.isoformat(), "exam_closed_automatically": False})
     write_json("settings.json", settings)
     audit("exam.started_by_admin", "admin", None, {"release_id": settings.get("exam_release_id")})
     return settings

@@ -16,9 +16,13 @@ with tempfile.TemporaryDirectory(prefix="classroom-student-qa-") as temp:
         setattr(config, attr, root / name)
         (root / name).mkdir()
     from app import main, learning, storage, programming
-    # Roster UI tests exercise opening an exam, not the Docker runner itself.
+    # Roster/entry UI tests exercise opening an exam, not the Docker runner itself.
     if os.environ.get("CSS_ROSTER_QA") == "1":
         main.code_runner.ready = lambda: True
+        main.code_runner.status = lambda: {"ready":True,"detail":"Fixture judge (UI only)","image_id":"qa-ui-image"}
+        def fixture_reference(source, language, problem, **kwargs):
+            return {"verdict":"AC","score":problem["points"],"passed":len(problem["tests"]),"total":len(problem["tests"]),"tests":[],"compile_log":""}
+        main.code_runner.judge = fixture_reference
     programming.FILES = root / "code-files"
     from app.security import hash_password, new_session
     (root / "exams" / "de-thuc-hanh.txt").write_text("Viết chương trình giải bài tập và nộp file theo yêu cầu.", encoding="utf-8")
@@ -58,6 +62,20 @@ with tempfile.TemporaryDirectory(prefix="classroom-student-qa-") as temp:
     with zipfile.ZipFile(answer,"w") as archive: archive.writestr("answer.txt","file-exam-original")
     ready["closed_course"] = closed_course
     ready["exam_zip"]=base64.b64encode(answer.getvalue()).decode()
+    if os.environ.get("CSS_TIMING_QA") == "1":
+        (root/"exams"/"timing-qa.txt").write_text("Private file exam question",encoding="utf-8")
+    if os.environ.get("CSS_ENROLLMENT_QA") == "1":
+        data = learning.load()
+        c = learning.find(data, "courses", course)
+        c.pop("enrollments", None)
+        c.pop("enrollment_tracking_since", None)
+        previous = (datetime.now(timezone.utc)-timedelta(days=2)).isoformat()
+        learning.find(data, "assignments", assignment).update(due_at=previous, closed_at=previous)
+        session = learning.find(data, "attendance", attendance)
+        session.update(lesson_at=previous, expires_at=previous, closed=True)
+        learning.find(data, "events", session["event_id"])["starts_at"] = previous
+        storage.write_json("learning.json", data)
+        learning.initialize_enrollments()
     print("QA_READY " + json.dumps(ready),flush=True)
     try:
         server.serve_forever()

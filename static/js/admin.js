@@ -249,7 +249,7 @@
     node.dataset.sending = "true"; button.disabled = true;
     try {
       const result = await window.cssRequest("/api/admin/notifications", { method: "POST", body: form });
-      node.reset(); notificationRecipients.clear(); renderNotificationStudents(); $("notification-picker").classList.add("hidden");
+      node.reset(); notificationRecipients.clear(); renderNotificationStudents(); $("notification-picker").classList.add("hidden");window.adminDrafts?.saved(node);
       show("notification-result", `Đã gửi thông báo thành công tới ${result.recipient_count} sinh viên.`);
     } catch (error) { show("notification-result", error.message, true); toastError(error); }
     finally { delete node.dataset.sending; button.disabled = false; }
@@ -277,9 +277,9 @@
   });
   $("settings-form")?.addEventListener("submit", async (event) => {
     event.preventDefault(); const form = new FormData(event.currentTarget); form.set("overwrite_previous", $("overwrite").value); form.set("exam_password_enabled", $("password-enabled").checked ? "true" : "false");
-    try { await window.cssRequest("/api/admin/settings", { method: "POST", body: form }); show("settings-result", "Đã lưu cấu hình kỳ thi."); } catch (error) { show("settings-result", error.message, true); toastError(error); }
+    try { await window.cssRequest("/api/admin/settings", { method: "POST", body: form }); window.adminDrafts?.saved(event.target);show("settings-result", "Đã lưu cấu hình kỳ thi."); } catch (error) { show("settings-result", error.message, true); toastError(error); }
   });
-  $("start-exam-admin")?.addEventListener("click", async () => { try { await window.cssRequest("/api/admin/start-exam", { method: "POST" }); location.reload(); } catch (error) { toastError(error); } });
+  $("start-exam-admin")?.addEventListener("click", async event => {const button=event.currentTarget;button.disabled=true;try {await window.examPreflight.open(new URLSearchParams(location.search).get('exam')||'current');}catch(error){toastError(error);}finally{button.disabled=false;}});
   $("end-exam")?.addEventListener("click", async () => { try { await window.cssRequest("/api/admin/end-exam", { method: "POST" }); location.reload(); } catch (error) { toastError(error); } });
   document.body.addEventListener("click", (event) => { const button = event.target.closest("[data-copy]"); if (button) navigator.clipboard?.writeText(button.dataset.copy); });
 
@@ -301,4 +301,5 @@
     else for(const node of body.querySelectorAll('[data-login-countdown]')){const row=students.find(r=>r.student_id===node.dataset.loginCountdown);if(row)node.textContent='Còn '+loginCountdown(row);}
   },1000);
   window.setInterval(()=>{if(!document.hidden&&$('accounts-body')?.getClientRects().length)loadAccounts().catch(()=>{});},10000);
+  window.notificationDraft={capture:()=>[...notificationRecipients],restore(ids){notificationRecipients.clear();for(const id of ids)if(typeof id==='string')notificationRecipients.add(id);renderNotificationStudents();$('notification-picker')?.classList.toggle('hidden',document.querySelector('[name="notification_scope"]:checked')?.value!=='selected');}};
 })();

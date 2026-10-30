@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
-from app import learning, main, storage, submissions, exams, programming, code_runner, submission_rate, submission_archive, deadlines
+from app import learning, main, storage, submissions, exams, programming, code_runner, submission_rate, submission_archive, deadlines, exam_preflight, exam_timing
 from app.security import hash_password, new_session, verify_password
 
 
@@ -201,10 +201,20 @@ class LearningTests(unittest.TestCase):
             self.assertEqual(self.request("/api/admin/programming/control",form={"exam_id":exam_id,"action":"start"})[0],200)
         row=programming.exam(exam_id)
         common_end=learning.date_value(row["ends_at"])
+        before=programming.snapshot("s1")["exams"][0]
+        self.assertEqual(before["started_at"],row["started_at"])
+        self.assertEqual(learning.date_value(before["ends_at"]),common_end)
+        self.assertTrue(before["can_start"])
+        self.assertIsNone(before["attempt"])
+        self.assertEqual(before["problems"],[])
         with patch.object(programming,"datetime") as clock:
             clock.now.return_value=common_end-timedelta(minutes=1)
             programming.start({"user_id":"s1","role":"student"},{"exam_id":exam_id},"127.0.0.1")
         self.assertEqual(learning.date_value(storage.read_json("programming_attempts.json")[exam_id+":s1"]["ends_at"]),common_end)
+        after=programming.snapshot("s1")["exams"][0]
+        self.assertEqual(after["started_at"],before["started_at"])
+        self.assertEqual(after["ends_at"],before["ends_at"])
+        self.assertNotEqual(after["attempt"]["started_at"],after["started_at"])
         deadlines.refresh(common_end)
         self.assertEqual(programming.exam(exam_id)["state"],"ended")
         self.assertEqual(storage.read_json("programming_attempts.json")[exam_id+":s1"]["status"],"expired")
@@ -975,6 +985,253 @@ class LearningTests(unittest.TestCase):
             self.assertIn(b"admin-sidebar-unified", html)
             self.assertIn("Không gian giảng dạy".encode(), html)
         self.assertIn(b"admin-design.css", self.request("/admin/courses")[1])
+
+    @unittest.skipUnless(__import__('os').environ.get('CSS_JUDGE_TESTS') == '1', 'Requires Docker')
+    def test_preflight_real_docker_reference_passes_sample_and_hidden_tests(self):
+        import time
+        exam_id,_=self.code_exam(self.course(),problems=json.dumps([{"title":"Sum","tests":[{"input":"1 2","output":"3","sample":True},{"input":"-4 9","output":"5","sample":False}]}]))
+        report=self.request("/api/admin/exam-preflight?exam="+exam_id)[1]
+        self.assertTrue(report["runner"]["ready"],report["runner"])
+        code,job=self.request("/api/admin/exam-preflight/verify",form={"exam_id":exam_id,"fingerprint":report["fingerprint"],"problem_index":"0","language":"python","source":"import sys\nprint(sum(map(int,sys.stdin.read().split())))"})
+        self.assertEqual(code,200,job)
+        end=time.monotonic()+45
+        while time.monotonic()<end:
+            with exam_preflight._jobs_lock:
+                state=exam_preflight._jobs[job["job_id"]]["state"]
+            if state!="running":break
+            time.sleep(.1)
+        with exam_preflight._jobs_lock:
+            result=copy.deepcopy(exam_preflight._jobs[job["job_id"]])
+        self.assertEqual(result["state"],"done",result)
+        self.assertEqual((result["result"]["verdict"],result["result"]["passed"]),("AC",2))
+        self.assertTrue(self.request("/api/admin/exam-preflight?exam="+exam_id)[1]["can_open"])
+        self.assertEqual(programming.rows(),[])
+
+    def test_scheduled_code_blocks_early_entry_then_uses_planned_common_clock(self):
+        begins=datetime.now(timezone.utc)+timedelta(minutes=5)
+        exam_id,_=self.code_exam(self.course(),scheduled_at=begins.isoformat(),duration_minutes="10")
+        with patch.object(code_runner,"ready",return_value=True):
+            self.assertEqual(self.request("/api/admin/programming/control",form={"exam_id":exam_id,"action":"start"})[0],200)
+        before=self.request("/api/student/workspace","s1")[1]["programming"]["exams"][0]
+        self.assertEqual(before["state"],"scheduled")
+        self.assertFalse(before["can_start"])
+        self.assertEqual(before["problems"],[])
+        self.assertEqual(self.request("/api/student/programming/start","s1",{"exam_id":exam_id})[0],409)
+        self.assertEqual(storage.read_json("programming_attempts.json",{}),{})
+        entered=begins+timedelta(minutes=1)
+        with patch.object(exam_timing,"datetime",wraps=datetime) as clock,patch.object(programming,"datetime",wraps=datetime) as student_clock:
+            clock.now.return_value=entered;student_clock.now.return_value=entered
+            programming.start({"user_id":"s1","role":"student"},{"exam_id":exam_id},"127.0.0.1")
+        attempt=storage.read_json("programming_attempts.json")[exam_id+":s1"]
+        self.assertEqual(learning.date_value(attempt["ends_at"]),begins+timedelta(minutes=10))
+
+    def test_code_timing_changes_waiting_and_running_update_existing_attempts(self):
+        future=datetime.now(timezone.utc)+timedelta(hours=1)
+        exam_id,_=self.code_exam(self.course(),scheduled_at=future.isoformat(),duration_minutes="10")
+        with patch.object(code_runner,"ready",return_value=True):
+            self.request("/api/admin/programming/control",form={"exam_id":exam_id,"action":"start"})
+        begins=datetime.now(timezone.utc)-timedelta(minutes=1)
+        form={"exam_id":exam_id,"scheduled_at":begins.isoformat(),"duration_minutes":"10"}
+        self.assertEqual(self.request("/api/admin/exam-timing","s1",form)[0],403)
+        self.assertEqual(self.request("/api/admin/exam-timing",form=form)[0],200)
+        self.assertEqual(self.request("/api/student/programming/start","s1",{"exam_id":exam_id})[0],200)
+        self.assertEqual(self.request("/api/admin/exam-timing",form={"exam_id":exam_id,"duration_minutes":"20"})[0],200)
+        expected=begins+timedelta(minutes=20)
+        self.assertEqual(learning.date_value(storage.read_json("programming_attempts.json")[exam_id+":s1"]["ends_at"]),expected)
+        feed=self.request("/api/student/programming/submissions?exam="+exam_id+"&problem=0","s1")[1]
+        self.assertEqual(learning.date_value(feed["ends_at"]),expected)
+        self.assertEqual(self.request("/api/admin/exam-timing",form={"exam_id":exam_id,"scheduled_at":future.isoformat(),"duration_minutes":"20"})[0],409)
+        self.assertEqual(self.request("/api/admin/exam-timing",form={"exam_id":exam_id,"duration_minutes":"0"})[0],400)
+        end=datetime.now(timezone.utc)+timedelta(minutes=4)
+        self.assertEqual(self.request("/api/admin/exam-timing",form={"exam_id":exam_id,"mode":"end","ends_at":end.isoformat()})[0],200)
+        self.assertEqual(learning.date_value(programming.exam(exam_id)["ends_at"]),end)
+        self.request("/api/admin/programming/control",form={"exam_id":exam_id,"action":"end"})
+        self.assertEqual(self.request("/api/admin/exam-timing",form={"exam_id":exam_id,"duration_minutes":"30"})[0],409)
+
+    def test_file_schedule_blocks_entry_and_timing_preserves_individual_extra_time(self):
+        course=self.course()
+        self.request("/api/admin/exam-context",form={"course_id":course,"title":"Scheduled file"})
+        directory=Path(self.temp.name)/"timed-files";directory.mkdir();(directory/"task.txt").write_text("Question",encoding="utf-8")
+        with patch.object(exams,"EXAM_DIR",directory):
+            self.assertEqual(self.request("/api/admin/distribute",form={"mode":"selected","exam_files":"task.txt"})[0],200)
+        future=datetime.now(timezone.utc)+timedelta(minutes=10)
+        self.assertEqual(self.request("/api/admin/exam-timing",form={"exam_id":"current","scheduled_at":future.isoformat(),"duration_minutes":"10"})[0],200)
+        self.assertEqual(self.request("/api/admin/start-exam",form={})[0],200)
+        before=self.request("/api/student/workspace","s1")[1]["exam"]
+        self.assertEqual(before["state"],"scheduled");self.assertFalse(before["can_start"])
+        self.assertEqual(self.request("/api/student/start","s1",{})[0],400)
+        begins=datetime.now(timezone.utc)-timedelta(minutes=1)
+        self.assertEqual(self.request("/api/admin/exam-timing",form={"exam_id":"current","scheduled_at":begins.isoformat(),"duration_minutes":"10"})[0],200)
+        self.assertEqual(self.request("/api/student/start","s1",{})[0],200)
+        self.assertEqual(self.request("/api/admin/students/s1/adjust-time",form={"minutes":"5"})[0],200)
+        self.assertEqual(self.request("/api/admin/exam-timing",form={"exam_id":"current","duration_minutes":"20"})[0],200)
+        item=storage.read_json("assignments.json")["s1"]
+        self.assertEqual(learning.date_value(item["ends_at"]),begins+timedelta(minutes=25))
+        self.assertEqual(item["extra_time_seconds"],300)
+
+    def finish_reference(self, exam_id, verdict="AC"):
+        import time
+        report = self.request("/api/admin/exam-preflight?exam="+exam_id)[1]
+        result = {"verdict":verdict,"score":100 if verdict=="AC" else 0,"passed":1 if verdict=="AC" else 0,"total":1,"tests":[],"compile_log":""}
+        with patch.object(code_runner,"judge",return_value=result):
+            code, job = self.request("/api/admin/exam-preflight/verify",form={"exam_id":exam_id,"fingerprint":report["fingerprint"],"problem_index":"0","language":"python","source":"print(3)"})
+            self.assertEqual(code,200,job)
+            end=time.monotonic()+3
+            while time.monotonic()<end:
+                with exam_preflight._jobs_lock:
+                    state=exam_preflight._jobs[job["job_id"]]["state"]
+                if state!="running":break
+                time.sleep(.01)
+            self.assertEqual(state,"done")
+        return self.request("/api/admin/exam-preflight?exam="+exam_id)[1]
+
+    def test_preflight_reference_required_and_never_counts_as_student_work(self):
+        exam_id,_=self.code_exam(self.course())
+        ready={"ready":True,"detail":"Ready","image_id":"qa-image"}
+        with patch.object(code_runner,"status",return_value=ready):
+            report=self.request("/api/admin/exam-preflight?exam="+exam_id)[1]
+            self.assertFalse(report["can_open"])
+            form={"exam_id":exam_id,"type":"programming","fingerprint":report["fingerprint"]}
+            self.assertEqual(self.request("/api/admin/exam-preflight?exam="+exam_id,"s1")[0],403)
+            self.assertEqual(self.request("/api/admin/exam-preflight/open",form=form)[0],409)
+            self.assertFalse(self.finish_reference(exam_id,"WA")["can_open"])
+            self.assertEqual(self.request("/api/admin/exam-preflight/open",form=form)[0],409)
+            report=self.finish_reference(exam_id)
+            self.assertTrue(report["can_open"])
+            self.assertEqual(programming.rows(),[])
+            self.assertEqual(storage.read_json("programming_attempts.json",{}),{})
+            self.assertEqual(self.request("/api/admin/exam-preflight/open",form=form)[0],200)
+            self.assertEqual(programming.exam(exam_id)["state"],"started")
+            self.assertEqual(self.request("/api/admin/exam-preflight/open",form=form)[0],409)
+
+    def test_preflight_changed_config_roster_and_image_invalidate_confirmation(self):
+        exam_id,_=self.code_exam(self.course())
+        ready={"ready":True,"detail":"Ready","image_id":"qa-image"}
+        with patch.object(code_runner,"status",return_value=ready):
+            original=self.finish_reference(exam_id)
+            ready["image_id"]="new-image"
+            form={"exam_id":exam_id,"type":"programming","fingerprint":original["fingerprint"]}
+            self.assertEqual(self.request("/api/admin/exam-preflight/open",form=form)[0],409)
+            ready["image_id"]="qa-image"
+            rows=storage.read_json("exam_catalog.json")
+            next(e for e in rows if e["id"]==exam_id)["programming"]["problems"][0]["tests"][0]["output"]="4"
+            storage.write_json("exam_catalog.json",rows)
+            self.assertEqual(self.request("/api/admin/exam-preflight/open",form=form)[0],409)
+            self.assertFalse(self.request("/api/admin/exam-preflight?exam="+exam_id)[1]["problems"][0]["verified"])
+            students=storage.read_json("students.json");students["s1"]["active"]=False;storage.write_json("students.json",students)
+            self.assertFalse(self.request("/api/admin/exam-preflight?exam="+exam_id)[1]["can_open"])
+
+    def test_preflight_judge_runs_outside_learning_lock_and_limits_concurrency(self):
+        import time
+        exam_id,_=self.code_exam(self.course())
+        entered,release=threading.Event(),threading.Event()
+        def judge(*args,**kwargs):
+            entered.set();release.wait(3)
+            return {"verdict":"AC","score":100,"passed":1,"total":1,"tests":[],"compile_log":""}
+        with patch.object(code_runner,"status",return_value={"ready":True,"detail":"Ready","image_id":"qa-image"}),patch.object(code_runner,"judge",side_effect=judge):
+            report=self.request("/api/admin/exam-preflight?exam="+exam_id)[1]
+            form={"exam_id":exam_id,"fingerprint":report["fingerprint"],"problem_index":"0","language":"python","source":"print(3)"}
+            job=self.request("/api/admin/exam-preflight/verify",form=form)[1]
+            try:
+                self.assertTrue(entered.wait(1))
+                self.assertTrue(learning.LOCK.acquire(blocking=False));learning.LOCK.release()
+                self.assertEqual(self.request("/api/student/workspace","s1")[0],200)
+                self.assertEqual(self.request("/api/admin/exam-preflight/verify",form=form)[0],429)
+            finally:
+                release.set()
+                end=time.monotonic()+3
+                while time.monotonic()<end and exam_preflight._jobs[job["job_id"]]["state"]=="running":time.sleep(.01)
+
+    def test_preflight_file_reviews_assigned_roster_and_existing_files(self):
+        course=self.course()
+        self.assertEqual(self.request("/api/admin/exam-context",form={"course_id":course,"title":"File review"})[0],200)
+        directory=Path(self.temp.name)/"review-files";directory.mkdir();(directory/"task.txt").write_text("Question",encoding="utf-8")
+        with patch.object(exams,"EXAM_DIR",directory):
+            self.assertFalse(self.request("/api/admin/exam-preflight?exam=current")[1]["can_open"])
+            self.assertEqual(self.request("/api/admin/distribute",form={"mode":"selected","exam_files":"task.txt"})[0],200)
+            report=self.request("/api/admin/exam-preflight?exam=current")[1]
+            self.assertTrue(report["can_open"])
+            self.assertEqual(report["participants"][0]["student_id"],"s1")
+            (directory/"task.txt").write_text("Changed question",encoding="utf-8")
+            self.assertEqual(self.request("/api/admin/exam-preflight/open",form={"exam_id":"current","type":"file","fingerprint":report["fingerprint"]})[0],409)
+            report=self.request("/api/admin/exam-preflight?exam=current")[1]
+            self.assertEqual(self.request("/api/admin/exam-preflight/open",form={"exam_id":"current","type":"file","fingerprint":report["fingerprint"]})[0],200)
+
+    def enrollment_fixture(self, all_students=False):
+        c = self.course("s1")
+        old_task = self.assignment(c)
+        lesson = self.create("event", course_id=c, title="Before joining", kind="lesson", starts_at=(datetime.now(timezone.utc)-timedelta(days=2)).isoformat())
+        attendance = self.create("attendance", course_id=c, event_id=lesson, expires_at=self.future)
+        self.create("close-attendance", session_id=attendance)
+        data = learning.load()
+        course = learning.find(data, "courses", c)
+        course.pop("enrollments", None)
+        course.pop("enrollment_tracking_since", None)
+        if all_students:
+            course["student_ids"] = None
+        learning.find(data, "assignments", old_task)["due_at"] = (datetime.now(timezone.utc)-timedelta(days=1)).isoformat()
+        storage.write_json("learning.json", data)
+        return c, old_task, attendance
+
+    def test_enrollment_late_join_excludes_old_work_but_keeps_open_tasks_and_privacy(self):
+        c, old, attendance = self.enrollment_fixture()
+        open_task = self.assignment(c)
+        self.create("course-members", course_id=c, student_ids="s1,s2")
+        data = learning.load()
+        course = learning.find(data, "courses", c)
+        book = {r["student_id"]: r for r in learning.gradebook(data, course, ["s1", "s2"])["items"]}
+        self.assertEqual((book["s1"]["attendance"], book["s1"]["homework"]), (9, 0))
+        self.assertEqual((book["s2"]["attendance"], book["s2"]["homework"]), (10, None))
+        self.assertEqual((book["s2"]["excluded_assignments"], book["s2"]["excluded_attendance"]), (1, 1))
+        self.assertFalse(course["enrollments"]["s2"]["include_previous"])
+        own = self.request("/api/student/workspace", "s2")[1]
+        self.assertFalse(next(r for r in own["assignments"] if r["id"] == old)["grading_applicable"])
+        self.assertTrue(next(r for r in own["assignments"] if r["id"] == open_task)["grading_applicable"])
+        self.assertFalse(own["attendance"][0]["grading_applicable"])
+        self.assertNotIn("excluded_student_ids", own["attendance"][0])
+        self.assertNotIn("enrollments", own["courses"][0])
+        self.assertNotIn("student_ids", own["courses"][0])
+        self.assertEqual(own["courses"][0]["enrollment"], course["enrollments"]["s2"])
+        admin = self.request("/api/learning")[1]
+        self.assertEqual(admin["attendance"][0]["excluded_student_ids"], ["s2"])
+        result = self.upload(open_task, "s2")[1]
+        self.create("grade", submission_id=result["id"], score="8", feedback="Good")
+        row = self.request("/api/student/workspace", "s2")[1]["gradebooks"][0]["items"][0]
+        self.assertEqual(row["homework"], 8)
+        self.create("grade-component", course_id=c, student_id="s2", component="attendance", score="7")
+        self.assertEqual(self.request("/api/student/workspace", "s2")[1]["gradebooks"][0]["items"][0]["attendance"], 7)
+
+    def test_enrollment_include_previous_and_rejoin_preserve_original_policy(self):
+        c, old, attendance = self.enrollment_fixture()
+        self.create("course-members", course_id=c, student_ids="s1,s2", include_previous="true")
+        original = copy.deepcopy(learning.load()["courses"][0]["enrollments"])
+        row = self.request("/api/student/workspace", "s2")[1]["gradebooks"][0]["items"][0]
+        self.assertEqual((row["attendance"], row["homework"]), (9, 0))
+        self.create("course-members", course_id=c, student_ids="s1")
+        self.create("course-members", course_id=c, student_ids="s1,s2", include_previous="false")
+        self.assertEqual(learning.load()["courses"][0]["enrollments"], original)
+        before = copy.deepcopy(learning.load())
+        self.assertEqual(self.request("/api/learning/course-members", form={"course_id":c,"student_ids":"s1,s2","include_previous":"bad"})[0], 400)
+        self.assertEqual(learning.load(), before)
+
+    def test_enrollment_baseline_preserves_legacy_and_tracks_future_automatic_members(self):
+        c, old, attendance = self.enrollment_fixture(all_students=True)
+        data = learning.load()
+        before = learning.gradebook(data, data["courses"][0], ["s1", "s2"])["items"]
+        self.assertEqual(learning.initialize_enrollments(), 1)
+        self.assertEqual(learning.initialize_enrollments(), 0)
+        data = learning.load()
+        after = learning.gradebook(data, data["courses"][0], ["s1", "s2"])["items"]
+        self.assertEqual(before, after)
+        students = storage.read_json("students.json")
+        students["s3"] = {"student_id":"s3","full_name":"New auto member","created_at":storage.utc_now(),"active":True}
+        storage.write_json("students.json", students)
+        s3 = learning.snapshot({"user_id":"s3","role":"student"})
+        self.assertFalse(s3["assignments"][0]["grading_applicable"])
+        self.assertEqual(s3["gradebooks"][0]["items"][0]["attendance"], 10)
+        joined = s3["courses"][0]["enrollment"]
+        self.create("course-members", course_id=c, student_ids="s1,s2,s3", include_previous="true")
+        self.assertEqual(learning.load()["courses"][0]["enrollments"]["s3"], joined)
 
     def test_course_edit_and_membership_keep_accounts_and_readonly_rules(self):
         c = self.create("course", name="Empty", code="EMPTY", semester="2026", enrollment="selected")

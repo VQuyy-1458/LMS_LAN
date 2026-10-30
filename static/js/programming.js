@@ -25,7 +25,7 @@
       status.innerHTML='<span data-judge-message>Đang kiểm tra bộ chấm…</span> <button type="button" class="btn btn-secondary btn-small" data-judge-refresh>Kiểm tra lại</button>';
       results.before(status);loadJudgeStatus();
     },0);
-    return `<section class="panel"><div class="panel-heading"><div><h2>Vận hành & chấm thi lập trình</h2><p class="muted">Chấm toàn bộ test đã nạp. Điểm bài toán = điểm tối đa × số test đạt / tổng số test.</p></div>${e.state==='idle'?`<button type="button" class="btn btn-primary" data-code-control="start" data-code-exam="${e.id}">Lưu và mở kỳ thi</button>`:e.state==='started'?`<button type="button" class="btn btn-danger" data-code-control="end" data-code-exam="${e.id}">Kết thúc kỳ thi</button>`:'<span>Đã kết thúc</span>'}</div><p class="fine-print">Bộ chấm sử dụng Docker. Test ẩn chỉ hiển thị kết quả đạt/sai cho sinh viên; giảng viên xem được input và output thực tế.</p><div data-code-admin-results="${e.id}">Đang tải bài nộp…</div></section>`;
+    return `<section class="panel"><div class="panel-heading"><div><h2>Vận hành & chấm thi lập trình</h2><p class="muted">Chấm toàn bộ test đã nạp. Điểm bài toán = điểm tối đa × số test đạt / tổng số test.</p></div>${e.state==='idle'?`<button type="button" class="btn btn-primary" data-code-control="start" data-code-exam="${e.id}">Lưu và kiểm tra mở thi</button>`:e.state==='started'?`<button type="button" class="btn btn-danger" data-code-control="end" data-code-exam="${e.id}">Kết thúc kỳ thi</button>`:'<span>Đã kết thúc</span>'}</div><p class="fine-print">Bộ chấm sử dụng Docker. Test ẩn chỉ hiển thị kết quả đạt/sai cho sinh viên; giảng viên xem được input và output thực tế.</p><div data-code-admin-results="${e.id}">Đang tải bài nộp…</div></section>`;
   }
   function history(data,course=''){
     const records=window.listUi.view('programming:all-history:'+course,(data.programming?.submissions||[]).filter(r=>!course||r.course_id===course),'submissions');
@@ -58,6 +58,8 @@
         if(control.dataset.codeControl==='start'){
           const form=document.querySelector('#exam-config-form');if(!form.reportValidity()){button.disabled=false;return;}
           await window.cssRequest('/api/admin/exam-configurations/save',{method:'POST',body:window.examConfig.payload(form,{starting:true})});
+          window.examConfig.ackSaved(form);
+          await window.examPreflight.open(control.dataset.codeExam);button.disabled=false;return;
         }
         await window.cssRequest('/api/admin/programming/control',{method:'POST',body:new URLSearchParams({exam_id:control.dataset.codeExam,action:control.dataset.codeControl})});location.reload();
       }

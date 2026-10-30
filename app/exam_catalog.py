@@ -20,6 +20,7 @@ def listing():
         active = {"id": active_id, "type": "file", "scheduled_at": None, "created_at": "", "description": ""}
         rows.insert(0, active)
     active.update({"title": settings.get("exam_title") or "Kỳ thi nộp file của lớp", "course_id": settings.get("exam_course_id"), "state": settings.get("exam_state", "idle"), "duration_minutes": settings.get("exam_duration_minutes", 90), "participants": settings.get("exam_participants", []), "started_at": settings.get("exam_started_at"), "active": True, "file_settings": {k: settings.get(k) for k in FILE_KEYS}})
+    active["scheduled_at"] = settings.get("exam_scheduled_at") or active.get("scheduled_at")
     for row in rows:
         row.setdefault("active", False)
         row.setdefault("state", "idle")
@@ -29,6 +30,9 @@ def listing():
             from .deadlines import exam_end
             end=exam_end(settings.get("exam_started_at"),settings.get("exam_duration_minutes"),settings.get("exam_ends_at")) if settings.get("exam_state") in {"started","ended"} else None
             row["ends_at"]=end.isoformat() if end else None
+    from .exam_timing import waiting
+    for row in rows:
+        row["waiting"] = waiting(row["state"], row.get("started_at"))
     return rows
 
 
@@ -103,7 +107,7 @@ def save(session, form, ip):
         old = next((r for r in rows if r["id"] == exam_id), None)
         if exam_id and not old:
             raise learning.LearningError(404, "Không tìm thấy kỳ thi.")
-        if old and old["state"] in {"distributed", "started", "ended"}:
+        if old and old["state"] in {"distributed", "scheduled", "started", "ended"}:
             raise learning.LearningError(409, "Kỳ thi đã phát đề. Không thể thay đổi cấu hình của lượt thi này.")
         kind = form.get("type", "file")
         if kind not in {"file", "programming"} or old and old["type"] != kind:
@@ -178,6 +182,7 @@ def save(session, form, ip):
             settings = read_json("settings.json")
             settings.update(row["file_settings"])
             settings.update({"exam_title": row["title"], "exam_course_id": course_id, "exam_participants": row["participants"], "exam_catalog_id": row["id"], "exam_assessment_type": assessment_type})
+            settings["exam_scheduled_at"] = row.get("scheduled_at")
             write_json("settings.json", settings)
         # Active fields are overlaid from the running engine when read.
         saved = [r for r in rows if r["id"] != row["id"]]
@@ -209,6 +214,7 @@ def activate(session, form, ip):
         students = read_json("students.json")
         settings.update(row["file_settings"])
         settings["exam_assessment_type"] = row["assessment_type"]
+        settings["exam_scheduled_at"] = row.get("scheduled_at")
         settings.update({"exam_catalog_id": row["id"], "exam_course_id": row["course_id"], "exam_title": row["title"], "exam_participants": sorted(s for s in members if students[s].get("active", True)), "exam_state": "idle", "exam_released": False, "exam_started_at": None, "exam_release_id": None, "exam_release_at": None, "exam_password_enabled": False, "exam_password_hash": None})
         for r in rows:
             r.pop("active", None)

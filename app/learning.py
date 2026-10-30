@@ -15,7 +15,7 @@ from pathlib import Path
 from .config import BASE_DIR, RUNTIME_DIR
 from .storage import read_json, write_json, utc_now, audit, atomic_transaction, save_payload
 from .submissions import validate_zip
-from . import submission_rate
+from . import submission_rate, enrollments
 
 FILES = RUNTIME_DIR / "learning-files"
 LOCK = threading.RLock()
@@ -37,6 +37,17 @@ def load():
     return data
 
 
+def initialize_enrollments():
+    """Baseline existing membership without guessing or changing historical marks."""
+    with LOCK, atomic_transaction():
+        data, students, at = load(), read_json("students.json"), utc_now()
+        changed = sum(enrollments.initialize(c, students, at, legacy=True) for c in data["courses"])
+        if changed:
+            write_json("learning.json", data)
+            audit("learning.enrollment_baseline", "system", "127.0.0.1", {"courses": changed})
+        return changed
+
+
 def gradebook(data, course, student_ids):
     now = datetime.now(timezone.utc)
     weights = course.get("weights", WEIGHTS)
@@ -53,10 +64,13 @@ def gradebook(data, course, student_ids):
     task_due = {task["id"]:date_value(task["due_at"]) <= now for task in tasks}
     rows = []
     for sid in student_ids:
-        absent = sum(a["records"].get(sid, {}).get("status") not in {"present", "late"} for a in closed)
+        absent = sum(a["records"].get(sid, {}).get("status") not in {"present", "late"}
+                     for a in closed if enrollments.applies(course, sid, a, "attendance", students))
         values = {"attendance": max(0, 10 - absent), "homework": None, "midterm": None, "final": None}
         homework = []
         for task in tasks:
+            if not enrollments.applies(course, sid, task, "assignment", students):
+                continue
             latest = latest_submissions.get((task["id"],sid))
             score = latest.get("score") if latest else (0 if task_due[task["id"]] else None)
             if task_due[task["id"]] or score is not None:
@@ -74,7 +88,7 @@ def gradebook(data, course, student_ids):
             overrides[row["component"]] = row["score"]
         complete = all(values[k] is not None for k, w in weights.items() if w > 0)
         total = round(sum((values[k] or 0) * w / 100 for k, w in weights.items()), 2) if complete else None
-        rows.append({"student_id": sid, "full_name": students.get(sid, {}).get("full_name", sid), **values, "total": total, "automatic": automatic, "overrides": overrides, "exam_results": exam_results[sid]})
+        rows.append({"student_id": sid, "full_name": students.get(sid, {}).get("full_name", sid), **values, "total": total, "automatic": automatic, "overrides": overrides, "exam_results": exam_results[sid], "enrollment": enrollments.info(course, sid, students), "excluded_assignments": sum(not enrollments.applies(course, sid, a, "assignment", students) for a in tasks), "excluded_attendance": sum(not enrollments.applies(course, sid, a, "attendance", students) for a in closed)})
     return {"course_id": course["id"], "weights": weights, "items": rows}
 
 
@@ -137,15 +151,26 @@ def snapshot(session):
         sid = session["user_id"]
         courses = [c for c in data["courses"] if admin or c.get("student_ids") is None or sid in c["student_ids"]]
         ids = {c["id"] for c in courses}
+        students = read_json("students.json")
+        course_by_id = {c["id"]: c for c in courses}
         result = {"courses": copy.deepcopy(courses)}
-        if not admin:
-            for course in result["courses"]:
+        for course in result["courses"]:
+            if admin:
+                course["enrollments"] = {k: enrollments.info(course, k, students) for k in enrollments.member_ids(course, students)}
+            else:
+                course["enrollment"] = enrollments.info(course, sid, students)
                 course.pop("student_ids", None)
+                course.pop("enrollments", None)
+                course.pop("enrollment_tracking_since", None)
         for key in ("materials", "events", "assignments", "submissions", "attendance"):
             result[key] = [copy.deepcopy(r) for r in data[key] if r["course_id"] in ids and (key != "submissions" or admin or r["student_id"] == sid)]
         for key in ("materials", "assignments", "submissions"):
             for row in result[key]:
                 row.pop("stored_name", None)
+        if not admin:
+            for kind, key in (("assignment", "assignments"), ("attendance", "attendance")):
+                for row in result[key]:
+                    row["grading_applicable"] = enrollments.applies(course_by_id[row["course_id"]], sid, row, kind, students)
         now = datetime.now(timezone.utc)
         for row in result["attendance"]:
             row["open"] = not row.get("closed") and date_value(row["expires_at"]) > now
@@ -154,6 +179,9 @@ def snapshot(session):
             if not admin:
                 row.pop("code", None)
                 row["record"] = row.pop("records", {}).get(sid)
+            else:
+                c = course_by_id[row["course_id"]]
+                row["excluded_student_ids"] = [k for k in enrollments.member_ids(c, students) if not enrollments.applies(c, k, row, "attendance", students)]
         if admin:
             result["students"] = [{"student_id": k, "full_name": v.get("full_name", ""), "active": v.get("active", True)} for k, v in read_json("students.json").items()]
         students = read_json("students.json")
@@ -246,6 +274,7 @@ def mutate(session, action, form, files, ip):
             if any(k not in read_json("students.json") for k in members):
                 raise LearningError(400, "Danh sách có MSSV chưa tồn tại.")
             row.update({"name": text(form, "name"), "code": text(form, "code", 80), "group": text(form, "group", 80, False), "semester": text(form, "semester", 80), "description": text(form, "description", 10000, False), "student_ids": list(dict.fromkeys(members)) if members or form.get("enrollment")=="selected" else None, "status": "active"})
+            enrollments.initialize(row, read_json("students.json"), row["created_at"])
             data["courses"].append(row)
         elif action == "course-update":
             row = course_access(data, text(form, "course_id", 80), session, write=True)
@@ -255,7 +284,10 @@ def mutate(session, action, form, files, ip):
             members = list(dict.fromkeys(form.get("student_ids", "").replace(",", " ").split()))
             if len(members)>10000 or any(sid not in read_json("students.json") for sid in members):
                 raise LearningError(400, "Danh sách có MSSV chưa tồn tại hoặc quá nhiều sinh viên.")
-            row["student_ids"] = members
+            policy = form.get("include_previous", "false")
+            if policy not in {"false", "true"}:
+                raise LearningError(400, "Quy tắc tính nội dung trước khi tham gia không hợp lệ.")
+            enrollments.update_members(row, read_json("students.json"), members, utc_now(), policy == "true")
         elif action in {"material", "event", "assignment", "attendance"}:
             course_id = text(form, "course_id", 80)
             course_access(data, course_id, session, write=True)

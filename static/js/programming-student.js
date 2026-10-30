@@ -20,6 +20,12 @@
   const codeLabel=index=>index<26?String.fromCharCode(65+index):String(index+1);
   function best(rows,index){return Math.max(0,...rows.filter(r=>r.problem_index===index&&Number.isFinite(r.effective_score)).map(r=>r.effective_score));}
   function deadline(e){return `<span class="code-deadline">Còn lại <strong data-deadline-countdown data-expires-at="${esc(e.attempt?.ends_at||e.ends_at||'')}">--:--</strong></span>`;}
+  function entry(e){
+    const time=value=>value?`<time datetime="${esc(value)}">${esc(new Date(value).toLocaleString('vi-VN',{timeZone:'Asia/Ho_Chi_Minh',dateStyle:'short',timeStyle:'medium'}))}</time>`:'Chưa xác định';
+    const end=Date.parse(e.ends_at),waiting=e.state==='scheduled',ticking=e.state==='started'&&Number.isFinite(end),allowed=e.can_start&&ticking&&end>window.submissionDeadlines.now();
+    const clockEnd=waiting?e.started_at:e.ends_at;
+    return `<section class="code-entry" data-code-entry="${esc(e.id)}" ${waiting?`data-exam-opens-at="${esc(e.started_at)}"`:''} aria-label="Thông tin thời gian trước khi vào làm bài"><div class="code-entry-heading"><span class="code-entry-icon" aria-hidden="true"><i class="fa fa-clock-o"></i></span><div><h3>${waiting?'Phòng thi đang chờ đến giờ bắt đầu':'Thời gian làm bài của phòng thi'}</h3><p>Giờ Việt Nam (UTC+7) · Đồng hồ đồng bộ với máy chủ</p></div></div><dl class="code-entry-times"><div><dt>Giờ bắt đầu</dt><dd>${time(e.started_at)}</dd></div><div><dt>Kết thúc lúc</dt><dd>${time(e.ends_at)}</dd></div><div class="code-entry-remaining"><dt>${waiting?'Bắt đầu sau':'Thời gian thực còn lại'}</dt><dd><strong ${waiting||ticking?`data-deadline-countdown data-expires-at="${esc(clockEnd)}" ${waiting?'data-zero-label="Đã đến giờ"':''}`:''}>${e.state==='ended'?'Đã kết thúc':waiting||ticking?'--:--':'Chưa xác định'}</strong></dd></div></dl><p class="code-entry-rule">Giờ thi tính chung từ giờ bắt đầu đã đặt. Sinh viên chỉ được vào khi đến giờ; nếu vào muộn chỉ còn thời gian của phòng thi. Bấm “Vào làm bài” không bắt đầu lại đồng hồ và không cấp thêm ${esc(e.duration_minutes)} phút.</p><div class="code-entry-actions">${waiting||e.can_start?`<button type="button" class="btn btn-primary" data-code-start="${esc(e.id)}" data-deadline-start data-expires-at="${esc(e.ends_at||'')}" ${allowed?'':'disabled'}><i class="fa fa-arrow-right" aria-hidden="true"></i> ${waiting?'Chờ đến giờ bắt đầu':allowed?'Vào làm bài':'Kỳ thi đã hết giờ'}</button>`:''}<p class="muted" role="status">${waiting?'Đề được giữ kín. Nút vào bài sẽ mở khi tới giờ.':allowed?'Sau khi vào, bạn sẽ thấy danh sách bài toán để chọn làm.':'Kỳ thi hiện không nhận lượt làm bài mới.'}</p></div></section>`;
+  }
   function render(data,course=''){
     context=data;
     return (data.programming?.exams||[]).filter(e=>!course||e.course_id===course).map(e=>{
@@ -31,10 +37,10 @@
       }
       const problemRows=window.listUi.view('programming:problems:'+e.id,e.problems.map(p=>({...p,best_score:best(rows,p.index),verdict:(()=>{const last=rows.filter(r=>r.problem_index===p.index).at(-1);return last?(last.state==='queued'||last.state==='running'?last.state:last.result?.verdict):'none';})()})),'problems');
       const max=e.problems.reduce((n,p)=>n+p.points,0),score=e.problems.reduce((n,p)=>n+best(rows,p.index),0);
-      return `<section class="panel code-exam" data-code-problem-list="${esc(e.id)}"><div class="panel-heading"><div><p class="eyebrow">THI LẬP TRÌNH</p><h2>${esc(e.title)}</h2><p class="muted">${e.duration_minutes} phút · ${e.languages.map(l=>languages[l]).join(' / ')}</p></div>${e.attempt?deadline(e):''}</div><p class="student-description">${esc(e.description||'Chọn một bài toán để đọc đề và viết lời giải.')}</p>${e.can_start?`<p class="muted">Kỳ thi tính giờ chung từ lúc giảng viên mở. Sau khi bắt đầu, bạn sẽ thấy danh sách các bài toán.</p><button type="button" class="btn btn-primary" data-code-start="${esc(e.id)}" data-deadline-start data-expires-at="${esc(e.ends_at||'')}">Bắt đầu thi lập trình</button>`:''}${e.attempt?`<div class="code-list-heading"><h3>Danh sách bài toán</h3><span><strong>${score}/${max}</strong> điểm tốt nhất</span></div>${window.listUi.controls('programming:problems:'+e.id,'problems')}<div class="table-wrap"><table class="code-problem-table"><thead><tr><th>Bài</th><th>Tên bài toán</th><th>Điểm tốt nhất</th><th>Lần nộp</th><th>Kết quả gần nhất</th><th></th></tr></thead><tbody>${problemRows.map(p=>{
+      return `<section class="panel code-exam" data-code-problem-list="${esc(e.id)}"><div class="panel-heading"><div><p class="eyebrow">THI LẬP TRÌNH</p><h2>${esc(e.title)}</h2><p class="muted">${e.duration_minutes} phút · ${e.languages.map(l=>languages[l]).join(' / ')}</p></div>${e.attempt?deadline(e):''}</div><p class="student-description">${esc(e.description||'Chọn một bài toán để đọc đề và viết lời giải.')}</p>${!e.attempt?entry(e):''}${e.attempt?`<div class="code-list-heading"><h3>Danh sách bài toán</h3><span><strong>${score}/${max}</strong> điểm tốt nhất</span></div>${window.listUi.controls('programming:problems:'+e.id,'problems')}<div class="table-wrap"><table class="code-problem-table"><thead><tr><th>Bài</th><th>Tên bài toán</th><th>Điểm tốt nhất</th><th>Lần nộp</th><th>Kết quả gần nhất</th><th></th></tr></thead><tbody>${problemRows.map(p=>{
         const attempts=rows.filter(r=>r.problem_index===p.index),last=attempts[attempts.length-1];
         return `<tr><td><span class="code-letter">${codeLabel(p.index)}</span></td><td><a class="student-list-title" data-code-problem="${p.index}" href="${esc(problemUrl(e,p.index))}">${esc(p.title)}</a><small>${p.time_limit_ms} ms · ${p.memory_limit_mb} MB</small></td><td><strong>${best(rows,p.index)}/${p.points}</strong></td><td>${attempts.length}</td><td>${last?window.programmingUi.status(last):'<span class="muted">Chưa nộp</span>'}</td><td><a class="btn btn-secondary btn-small" href="${esc(problemUrl(e,p.index))}">${e.can_submit?'Làm bài':'Xem bài'}</a></td></tr>`;
-      }).join('')}</tbody></table></div><p class="muted">Chọn tên bài để mở trang làm bài. Mỗi bài có lịch sử nộp và kết quả riêng.</p>`:!e.can_start?'<p class="alert alert-info">Kỳ thi hiện chưa nhận lượt làm bài mới.</p>':''}</section>`;
+      }).join('')}</tbody></table></div><p class="muted">Chọn tên bài để mở trang làm bài. Mỗi bài có lịch sử nộp và kết quả riêng.</p>`:''}</section>`;
     }).join('');
   }
   function workspace(e,p,rows){
@@ -69,7 +75,7 @@
     const exam=data.programming?.exams.find(e=>e.id===node.dataset.examId);
     if(!exam)return false;
     updateHistory(node,(data.programming.submissions||[]).filter(r=>r.exam_id===exam.id&&r.problem_index===Number(node.dataset.problemIndex)));
-    updateDeadline(node.querySelector('form'),exam.can_submit);
+    const form=node.querySelector('form');form.dataset.expiresAt=exam.attempt?.ends_at||exam.ends_at||'';node.querySelectorAll('[data-deadline-countdown]').forEach(n=>n.dataset.expiresAt=form.dataset.expiresAt);updateDeadline(form,exam.can_submit);
     return true;
   }
   window.listUi.on('programming',id=>{const node=current();if(node&&id.startsWith('programming:history:')){const box=node.querySelector('[data-code-problem-history]'),rows=JSON.parse(box.dataset.signature||'[]');delete box.dataset.signature;updateHistory(node,rows);}else document.dispatchEvent(new CustomEvent('programming-list-change'));});
@@ -89,7 +95,7 @@
     try{
       const data=await window.cssRequest(`/api/student/programming/submissions?exam=${encodeURIComponent(node.dataset.examId)}&problem=${node.dataset.problemIndex}`,{cache:'no-store'});
       if(!node.isConnected)return;
-      window.submissionDeadlines.sync(data.server_time);updateHistory(node,data.submissions);updateDeadline(node.querySelector('form'),data.can_submit);indicator.textContent='';
+      window.submissionDeadlines.sync(data.server_time);updateHistory(node,data.submissions);const form=node.querySelector('form');if(data.ends_at){form.dataset.expiresAt=data.ends_at;node.querySelectorAll('[data-deadline-countdown]').forEach(n=>n.dataset.expiresAt=data.ends_at);}updateDeadline(form,data.can_submit);indicator.textContent='';
     }catch(error){if(node.isConnected)indicator.textContent='Chưa cập nhật được kết quả. Đang thử lại…';}
     finally{polling=false;}
   }

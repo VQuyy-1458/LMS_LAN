@@ -58,10 +58,12 @@ def snapshot(sid):
         attempt = attempts.get(row["id"] + ":" + sid)
         from .deadlines import exam_end
         common_end = exam_end(row.get("started_at"), row.get("duration_minutes"), row.get("ends_at"))
-        allowed = bool(attempt and row["state"] == "started" and learning.date_value(attempt["ends_at"]) > now)
-        item = {k: row.get(k) for k in ("id", "title", "description", "course_id", "duration_minutes", "state")}
+        allowed = bool(attempt and row["state"] == "started" and not row.get("waiting") and learning.date_value(attempt["ends_at"]) > now)
+        item = {k: row.get(k) for k in ("id", "title", "description", "course_id", "duration_minutes", "state", "started_at", "scheduled_at")}
         item["assessment_type"] = row.get("assessment_type", "test")
-        item.update({"ends_at": common_end.isoformat() if common_end else None, "status": "expired" if (attempt and learning.date_value(attempt["ends_at"])<=now) or (common_end and common_end<=now) else row["state"], "attempt": attempt, "can_start": row["state"] == "started" and not attempt and (not common_end or common_end>now), "can_submit": allowed and (not common_end or common_end>now), "languages": row["programming"]["languages"], "problems": []})
+        if row.get("waiting"):
+            item["state"] = "scheduled"
+        item.update({"ends_at": common_end.isoformat() if common_end else None, "status": "expired" if (attempt and learning.date_value(attempt["ends_at"])<=now) or (common_end and common_end<=now) else row["state"], "attempt": attempt, "can_start": row["state"] == "started" and not row.get("waiting") and not attempt and (not common_end or common_end>now), "can_submit": allowed and (not common_end or common_end>now), "languages": row["programming"]["languages"], "problems": []})
         if attempt:
             item["problems"] = [{"index": i, "title": p["title"], "statement": p["statement"], "points": p["points"], "time_limit_ms": p["time_limit_ms"], "memory_limit_mb": p["memory_limit_mb"], "samples": [t for t in p["tests"] if t["sample"]]} for i, p in enumerate(row["programming"]["problems"])]
         result.append(item)
@@ -91,9 +93,13 @@ def control(session, form, ip, runner_ready=None):
             else:
                 participants = sorted(s for s in members if students[s].get("active", True))
             now = datetime.now(timezone.utc)
-            row.update({"state": "started", "started_at": now.isoformat(), "ends_at": (now + timedelta(minutes=row["duration_minutes"])).isoformat(), "participants": participants})
+            from .exam_timing import window
+            begins, ends = window(row.get("scheduled_at"), row["duration_minutes"], now)
+            if ends <= now:
+                raise learning.LearningError(409, "Lịch thi đã hết thời gian. Hãy điều chỉnh giờ bắt đầu trước khi mở.")
+            row.update({"state": "started", "started_at": begins.isoformat(), "ends_at": ends.isoformat(), "participants": participants})
         elif action == "end":
-            if row["state"] != "started": raise learning.LearningError(409, "Kỳ thi chưa mở.")
+            if row["state"] not in {"started", "scheduled"}: raise learning.LearningError(409, "Kỳ thi chưa mở.")
             row.update({"state": "ended", "ended_at": utc_now()})
         else: raise learning.LearningError(400, "Thao tác không hợp lệ.")
         catalog = read_json("exam_catalog.json", [])
@@ -112,9 +118,9 @@ def student_submissions(sid, exam_id, problem_index):
     from .deadlines import exam_end
     end = exam_end(row.get("started_at"), row.get("duration_minutes"), row.get("ends_at"))
     now = datetime.now(timezone.utc)
-    allowed = bool(attempt and row["state"] == "started" and learning.date_value(attempt["ends_at"]) > now and (not end or end > now))
+    allowed = bool(attempt and row["state"] == "started" and not row.get("waiting") and learning.date_value(attempt["ends_at"]) > now and (not end or end > now))
     return {"submissions": [public_submission(r) for r in rows() if r["student_id"] == sid and r["exam_id"] == exam_id and r["problem_index"] == index],
-            "can_submit": allowed, "server_time": utc_now()}
+            "can_submit": allowed, "server_time": utc_now(), "ends_at": attempt.get("ends_at") if attempt else None}
 
 
 def start(session, form, ip):
@@ -122,6 +128,7 @@ def start(session, form, ip):
     with learning.LOCK, atomic_transaction():
         row = exam(form.get("exam_id"))
         if not eligible(row, sid): raise learning.LearningError(403, "Bạn không thuộc danh sách dự thi.")
+        if row.get("waiting"): raise learning.LearningError(409, "Chưa đến giờ bắt đầu dự kiến của kỳ thi.")
         if row["state"] != "started": raise learning.LearningError(409, "Giảng viên chưa mở hoặc đã kết thúc kỳ thi.")
         from .deadlines import exam_end
         common_end = exam_end(row.get("started_at"), row.get("duration_minutes"), row.get("ends_at"))
@@ -159,7 +166,7 @@ def submit(session, form, file, ip):
                     raise learning.LearningError(409, "Yêu cầu gửi lại có nội dung khác. Hãy tạo lần nộp mới.")
                 return {"ok":True, "submission":public_submission(previous)}
         attempt = read_json("programming_attempts.json", {}).get(row["id"] + ":" + sid)
-        if row["state"] != "started" or not attempt or learning.date_value(attempt["ends_at"]) <= datetime.now(timezone.utc): raise learning.LearningError(409, "Chưa bắt đầu hoặc đã hết thời gian nộp bài.")
+        if row["state"] != "started" or row.get("waiting") or not attempt or learning.date_value(attempt["ends_at"]) <= datetime.now(timezone.utc): raise learning.LearningError(409, "Chưa bắt đầu hoặc đã hết thời gian nộp bài.")
         from .deadlines import exam_end
         common_end = exam_end(row.get("started_at"), row.get("duration_minutes"), row.get("ends_at"))
         if common_end and common_end <= datetime.now(timezone.utc): raise learning.LearningError(409, "Đã hết thời gian nộp bài của kỳ thi.")
