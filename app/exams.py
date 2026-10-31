@@ -6,7 +6,7 @@ import math
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
 from .config import EXAM_DIR, ALLOWED_EXAM_EXTENSIONS
-from .storage import read_json, write_json, utc_now, audit, mutation
+from .storage import read_json, write_json, utc_now, audit, mutation, save_payload
 from .security import hash_password, verify_password
 
 
@@ -16,6 +16,27 @@ def list_exam_files() -> list[dict]:
         if path.is_file() and not path.is_symlink() and path.suffix.lower() in ALLOWED_EXAM_EXTENSIONS:
             result.append({"name": path.name, "size": path.stat().st_size, "extension": path.suffix.lower()})
     return result
+
+
+def add_exam_file(file: dict | None) -> dict:
+    if not file or not file.get("filename") or not file.get("data"):
+        raise ValueError("Hãy chọn một file đề không rỗng.")
+    name = file["filename"]
+    if (not isinstance(name, str) or len(name) > 180 or name != name.strip(" .")
+            or name.startswith(".") or any(char in name for char in '/\\,:<>"|?*')
+            or any(ord(char) < 32 for char in name)
+            or Path(name).suffix.lower() not in ALLOWED_EXAM_EXTENSIONS):
+        raise ValueError("Tên hoặc định dạng file đề không hợp lệ. Chỉ nhận PDF, TXT và ảnh.")
+    if name.split(".", 1)[0].upper() in {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))}:
+        raise ValueError("Tên file đề không hợp lệ.")
+    if len(file["data"]) > 45 * 1024 * 1024:
+        raise ValueError("File đề vượt giới hạn 45 MiB.")
+    EXAM_DIR.mkdir(parents=True, exist_ok=True)
+    if any(item.name.casefold() == name.casefold() for item in EXAM_DIR.iterdir()):
+        raise FileExistsError("File đề đã tồn tại. Hãy đổi tên file trước khi tải lên.")
+    path = EXAM_DIR / name
+    save_payload(path, file["data"])
+    return {"name": name, "size": len(file["data"]), "extension": path.suffix.lower()}
 
 def _ip_sort(ip: str):
     if not ip or ip == "unknown":

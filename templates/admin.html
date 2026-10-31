@@ -1,14 +1,15 @@
 {% extends "base.html" %}
 {% block title %}{{ 'Khóa học' if section == 'courses' else 'Admin Dashboard' }} · LAN-LMS{% endblock %}
 {% block body %}
-{% if section == 'courses' %}<link rel="stylesheet" href="/static/css/student.css"><link rel="stylesheet" href="/static/css/courses-admin.css?v=20261030-8"><link rel="stylesheet" href="/static/css/admin-attendance.css">{% endif %}
+{% if section == 'courses' %}<link rel="stylesheet" href="/static/css/student.css"><link rel="stylesheet" href="/static/css/courses-admin.css?v=20261030-8"><link rel="stylesheet" href="/static/css/admin-attendance.css?v=20261031-1">{% endif %}
 {% if section in ['dashboard','monitor','exam','submissions'] %}<link rel="stylesheet" href="/static/css/admin-lms.css">{% endif %}
 {% if section == 'monitor' %}<link rel="stylesheet" href="/static/css/exam-monitor.css?v=20261030-9">{% endif %}
 {% if section not in ['monitor','notifications'] %}<link rel="stylesheet" href="/static/css/admin-design.css">{% endif %}
 <link rel="stylesheet" href="/static/css/admin-sidebar.css?v=20261030-3">
-{% if section in ['exam','courses'] %}<link rel="stylesheet" href="/static/css/admin-exams.css?v=20261030-4">{% endif %}
+{% if section in ['exam','courses'] %}<link rel="stylesheet" href="/static/css/admin-exams.css?v=20261031-4">{% endif %}
 {% if section == 'exam' %}<link rel="stylesheet" href="/static/css/programming.css?v=20261030-8">{% endif %}
 <link rel="stylesheet" href="/static/css/activity-colors.css">
+{% if section == 'courses' %}<link rel="stylesheet" href="/static/css/course-schedule.css?v=20261031-2">{% endif %}
 <link rel="stylesheet" href="/static/css/admin-drafts.css?v=20261030-8">
 <div class="admin-shell admin-sidebar-unified {{ 'course-admin-shell' if section == 'courses' else '' }} {{ 'admin-redesign' if section not in ['monitor','notifications'] else '' }}" data-admin-section="{{ section|default('dashboard') }}" data-draft-owner="{{ session.user_id }}">
     <aside class="main-sidebar" aria-label="Điều hướng quản trị">
@@ -187,8 +188,17 @@
                     </div>
                 </div>
                 {% if not exam_files %}
-                <div class="alert alert-warning">Chưa có file đề hợp lệ trong thư mục de-thi/.</div>
+                <div class="alert alert-warning" id="empty-exam-files">Chưa có file đề. Tải đề lên bên dưới để phân phối.</div>
                 {% endif %}
+                <form id="exam-file-upload-form" class="stack-form exam-file-upload-form" enctype="multipart/form-data">
+                    <label for="new-exam-file">Thêm file đề mới</label>
+                    <div class="bridge-inline">
+                        <input id="new-exam-file" type="file" name="file" accept=".pdf,.txt,.png,.jpg,.jpeg,.gif,.webp" required>
+                        <button class="btn btn-secondary" type="submit"><i class="fa fa-cloud-upload"></i> Tải đề lên</button>
+                    </div>
+                    <p class="fine-print">Chấp nhận PDF, TXT hoặc ảnh, tối đa 45 MiB. Đề vừa tải lên sẽ có ngay trong danh sách phân phối.</p>
+                    <div id="exam-file-upload-result" class="notice hidden" role="status" aria-live="polite"></div>
+                </form>
                 <form id="distribution-form" class="stack-form"><label for="distribution-mode">Chế độ phân
                     phối</label><select id="distribution-mode" name="mode">
                     <option value="selected">Phân phối từ các đề được chọn</option>
@@ -204,7 +214,7 @@
                             <button type="button" class="btn btn-ghost btn-small" id="clear-all-exams">Bỏ chọn tất cả
                             </button>
                         </div>
-                        <div class="two-cols">{% for exam in exam_files %}<label class="checkbox-row"><input
+                        <div class="two-cols" id="exam-file-choices">{% for exam in exam_files %}<label class="checkbox-row"><input
                                 type="checkbox" name="exam-choice" value="{{ exam.name }}" checked> {{ exam.name
                             }}</label>{% endfor %}
                         </div>
@@ -233,7 +243,7 @@
                     <div class="alert alert-warning">Phát đề là thao tác không thể hoàn tác trong lượt thi. Hãy kiểm tra
                         tài khoản và file đề trước khi xác nhận.
                     </div>
-                    <button class="btn btn-primary" type="submit" {% if settings.exam_released or not exam_files
+                    <button class="btn btn-primary" id="distribute-exams-button" data-released="{{ 'true' if settings.exam_released else 'false' }}" type="submit" {% if settings.exam_released or not exam_files
                             %}disabled{% endif %}><i class="fa fa-paper-plane"></i> Phát đề ngay
                     </button>
                 </form>
@@ -437,20 +447,20 @@
 <script defer src="/static/js/submission-deadlines.js?v=20261030-10"></script>
 <script defer src="/static/js/admin-icons.js"></script>
 <script defer src="/static/js/admin-sidebar.js"></script>
-<script defer src="/static/js/admin.js?v=20261030-10"></script>
+<script defer src="/static/js/admin.js?v=20261031-3"></script>
 {% if section not in ['monitor','notifications'] %}<script defer src="/static/js/admin-design.js"></script>{% endif %}
 {% if section == 'exam' %}<link rel="stylesheet" href="/static/css/exam-preflight.css?v=20261030-8"><script defer src="/static/js/exam-preflight.js?v=20261030-10"></script><script defer src="/static/js/exam-timing.js?v=20261030-9"></script><script defer src="/static/js/exam-test-csv.js"></script><script defer src="/static/js/programming.js?v=20261030-10"></script>{% endif %}
-{% if section in ['exam','courses'] %}<script defer src="/static/js/admin-exams.js?v=20261030-10"></script>{% endif %}
-{% if section == 'submissions' %}<link rel="stylesheet" href="/static/css/programming.css?v=20261030-8"><link rel="stylesheet" href="/static/css/submission-archive.css"><script defer src="/static/js/programming.js?v=20261030-10"></script><script defer src="/static/js/submission-archive.js?v=20261030-9"></script>{% endif %}
+{% if section in ['exam','courses'] %}<script defer src="/static/js/admin-exams.js?v=20261031-4"></script>{% endif %}
+{% if section == 'submissions' %}<link rel="stylesheet" href="/static/css/programming.css?v=20261030-8"><link rel="stylesheet" href="/static/css/submission-archive.css"><script defer src="/static/js/programming.js?v=20261030-10"></script><script defer src="/static/js/submission-archive.js?v=20261031-1"></script>{% endif %}
 {% if section == 'dashboard' %}<script defer src="/static/js/admin-teacher-calendar.js"></script>{% endif %}
 {% if section in ['dashboard','monitor','exam','submissions'] %}<script defer src="/static/js/admin-lms.js?v=20261030-10"></script>{% endif %}
 {% if section == 'courses' %}
 <script defer src="/static/vendor/zxing/zxing-browser.min.js"></script>
 <script defer src="/static/js/attendance-qr.js"></script>
 <script defer src="/static/js/file-preview.js"></script>
-<script defer src="/static/js/admin-courses-design.js?v=20261030-8"></script>
-<script defer src="/static/js/admin-attendance.js?v=20261030-8"></script>
-<script defer src="/static/js/learning-admin.js?v=20261030-9"></script>
+<script defer src="/static/js/admin-courses-design.js?v=20261031-2"></script>
+<script defer src="/static/js/admin-attendance.js?v=20261031-2"></script>
+<script defer src="/static/js/learning-admin.js?v=20261031-1"></script>
 {% endif %}
 <script defer src="/static/js/admin-drafts.js?v=20261030-8"></script>
 {% endblock %}

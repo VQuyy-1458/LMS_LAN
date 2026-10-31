@@ -1,0 +1,52 @@
+.course-admin-shell .schedule-page{display:grid;gap:18px}
+.course-admin-shell .schedule-page>.panel{margin-bottom:0}
+.course-admin-shell .schedule-header{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;padding:3px 0 5px}
+.course-admin-shell .schedule-eyebrow{display:block;color:#5774a4;font-size:10px;font-weight:800;letter-spacing:.13em;margin-bottom:7px}
+.course-admin-shell .schedule-header h2{font-size:26px;line-height:1.2;letter-spacing:-.035em;color:#193153;margin:0 0 7px}
+.course-admin-shell .schedule-header p{font-size:13px;line-height:1.5;color:#71829b;margin:0}
+.course-admin-shell .schedule-header-actions{display:flex;align-items:center;justify-content:flex-end;gap:12px;flex-wrap:wrap}
+.course-admin-shell .schedule-header-actions>.btn{min-height:38px;padding:9px 15px;box-shadow:none}
+.course-admin-shell .schedule-header-actions>.btn .fa{margin-right:7px}
+.course-admin-shell .schedule-week-nav{display:flex;align-items:center;border:1px solid #dce5f1;border-radius:9px;background:#fff;overflow:hidden}
+.course-admin-shell .schedule-week-nav button{min-width:38px;height:37px;padding:0 11px;border:0;border-right:1px solid #e7ecf4;background:#fff;color:#466387;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer}
+.course-admin-shell .schedule-week-nav button:last-child{border-right:0}
+.course-admin-shell .schedule-week-nav button:hover{background:#f0f5ff;color:#2158bd}
+.course-admin-shell .schedule-week-nav button:focus-visible,.course-admin-shell .schedule-item:focus-visible,.course-admin-shell .schedule-history-row:focus-visible{outline:2px solid #3569d8;outline-offset:2px}
+.course-admin-shell .schedule-panel,.course-admin-shell .schedule-history{border:1px solid #e1e8f2;border-radius:14px;background:#fff;box-shadow:0 5px 20px #19315308;padding:21px 24px}
+.course-admin-shell .schedule-panel-head{display:flex;align-items:end;justify-content:space-between;gap:12px;margin-bottom:17px}
+.course-admin-shell .schedule-panel-head h3{font-size:17px;color:#203958;letter-spacing:-.02em;margin:0}
+.course-admin-shell .schedule-counts{display:flex;align-items:center;gap:15px;color:#7b8ca5;font-size:11px;white-space:nowrap}
+.course-admin-shell .schedule-counts strong{font-size:13px;color:#314d73}
+.course-admin-shell .schedule-day-strip{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px;align-items:stretch}
+.course-admin-shell .schedule-day-chip{display:flex;flex-direction:column;gap:10px;min-width:0;min-height:158px;padding:11px;border:1px solid #e5ebf4;border-radius:10px;background:#f9fbfe}
+.course-admin-shell .schedule-day-chip.has-events{border-color:#d5e2f5;background:#f6f9ff}
+.course-admin-shell .schedule-day-chip.is-today{border-color:#5c85e5;box-shadow:inset 0 0 0 1px #5c85e5}
+.course-admin-shell .schedule-day-heading{display:grid;gap:5px;padding-bottom:9px;border-bottom:1px solid #e6edf7}
+.course-admin-shell .schedule-day-heading>span{font-size:10px;font-weight:700;color:#6c83a5}
+.course-admin-shell .schedule-day-heading strong{font-size:20px;line-height:1;color:#294368}
+.course-admin-shell .schedule-day-heading strong small{font-size:11px;font-weight:500;color:#899bb4}
+.course-admin-shell .schedule-calendar-items{display:grid;align-content:start;gap:6px;min-width:0}
+.course-admin-shell .schedule-calendar-event{box-sizing:border-box;display:grid;gap:4px;min-width:0;width:100%;margin:0;padding:8px;border:1px solid var(--activity-line);border-left:3px solid var(--activity-color);border-radius:7px;background:var(--activity-bg);color:var(--activity-ink);font:inherit;text-align:left;overflow-wrap:anywhere}
+.course-admin-shell button.schedule-calendar-event{cursor:pointer}
+.course-admin-shell button.schedule-calendar-event:hover{filter:brightness(.97);border-color:var(--activity-color)}
+.course-admin-shell .schedule-calendar-event:focus-visible,.course-admin-shell .schedule-history-row:focus-visible{outline:2px solid #3569d8;outline-offset:2px}
+.course-admin-shell .schedule-calendar-event span{font-size:10px;font-weight:750}
+.course-admin-shell .schedule-calendar-event strong{font-size:11px;line-height:1.35}
+.course-admin-shell .schedule-calendar-event small{font-size:9px;line-height:1.3;opacity:.85}
+.course-admin-shell .schedule-day-empty{font-size:10px;color:#9baac0}
+.course-admin-shell .schedule-history-row{display:flex;align-items:center;gap:12px;width:100%;min-width:0;margin:0;padding:12px 14px;border:1px solid #e7edf5;border-left:3px solid var(--activity-color,#5a82cc);border-radius:9px;background:#fff;color:#344b6b;text-align:left;font:inherit;cursor:pointer}
+.course-admin-shell .schedule-history-row:hover{border-color:#a8c0ef;background:#f8fbff}
+.course-admin-shell .schedule-item-icon{display:grid;place-items:center;flex:0 0 34px;height:34px;border-radius:8px;background:#edf3ff;color:#4f79d0;font-size:14px}
+.course-admin-shell .schedule-item-main{display:grid;gap:4px;flex:1;min-width:0}
+.course-admin-shell .schedule-item-main strong{font-size:12px;line-height:1.35;color:#263e61;overflow-wrap:anywhere}
+.course-admin-shell .schedule-item-main small{font-size:10px;line-height:1.4;color:#8090a7}
+.course-admin-shell .schedule-history-row>.fa-angle-right{color:#9cacc1}
+.course-admin-shell .schedule-history-list{display:grid;gap:7px}
+.course-admin-shell .schedule-history-row .bridge-pill{margin-left:auto}
+.course-admin-shell .schedule-history-empty{margin:0;padding:12px;color:#8293a9;font-size:12px}
+.course-admin-shell .attendance-session-detail{border:1px solid #e1e8f2;border-radius:14px;box-shadow:0 5px 20px #19315308}
+.course-admin-shell .attendance-session-detail .ref-heading-row{border-bottom:1px solid #edf1f7;padding-bottom:17px}
+.course-admin-shell .attendance-detail-table td{vertical-align:middle}
+@media(max-width:1100px){.course-admin-shell .schedule-day-strip{overflow-x:auto;grid-template-columns:repeat(7,minmax(160px,1fr));padding-bottom:4px}}
+@media(max-width:900px){.course-admin-shell .schedule-header{align-items:flex-start;flex-direction:column}.course-admin-shell .schedule-header-actions{justify-content:flex-start}}
+@media(max-width:560px){.course-admin-shell .schedule-header h2{font-size:23px}.course-admin-shell .schedule-header-actions{width:100%}.course-admin-shell .schedule-header-actions>.btn{flex:1}.course-admin-shell .schedule-panel,.course-admin-shell .schedule-history{padding:17px}.course-admin-shell .schedule-panel-head{align-items:flex-start;flex-direction:column}.course-admin-shell .schedule-history-row{gap:9px;padding:11px}.course-admin-shell .schedule-item-icon{flex-basis:30px;height:30px}}

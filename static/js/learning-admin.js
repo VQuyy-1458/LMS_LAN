@@ -73,6 +73,7 @@
   function drawAttendanceQr(){
     window.listUi.preserveTable('course:gradebook:'+selected,content.querySelector('.editable-gradebook'));
     window.classroomPreview.decorate(content);
+    if(tab==='attendance'&&attendanceId)window.classroomAttendance.decorate(content,data,course(),attendanceId);
     content.querySelectorAll('[data-qr-session]').forEach(el=>{
       const row=data.attendance.find(r=>r.id===el.dataset.qrSession);
       const url=new URL('/student/attendance',location.origin);url.searchParams.set('session',row.id);url.searchParams.set('code',row.code);
@@ -87,6 +88,18 @@
     const session=e.target.closest('[data-attendance-open]');if(session){openAttendance(session.dataset.attendanceOpen);return;}
     if(e.target.closest('[data-attendance-back]')){openAttendance('');return;}
     const attendancePager=e.target.closest('[data-attendance-page]');if(attendancePager){attendancePage=Number(attendancePager.dataset.attendancePage);render();drawAttendanceQr();return;}
+    const choice=e.target.closest('[data-attendance-choice]');if(choice){
+      if(busy)return;
+      const sessionId=attendanceId,studentId=choice.dataset.studentId,value=choice.dataset.attendanceChoice;
+      const record=data.attendance.find(row=>row.id===sessionId)?.records[studentId];
+      if(record?.status===value)return;
+      const body=new FormData();
+      body.set('session_id',sessionId);body.set('student_id',studentId);body.set('status',value);
+      body.set('reason',value==='present'?'Điểm danh thủ công: Có mặt':'Điểm danh thủ công: Đến muộn');
+      busy=true;choice.closest('.attendance-choices').querySelectorAll('button').forEach(button=>button.disabled=true);
+      window.cssRequest('/api/learning/attendance-record',{method:'POST',body}).then(async()=>{window.cssToast('Đã cập nhật điểm danh.','success');await load();}).catch(async error=>{window.cssToast(error.message,'error');await load();}).finally(()=>{busy=false;});
+      return;
+    }
 
     if(e.target.closest('[data-member-add]')){const c=course(),allowed=data.students.filter(s=>!members(c).some(m=>m.student_id===s.student_id));window.adminDesign.modal('Thêm sinh viên vào lớp',allowed.length?`<form class="stack-form" data-action="course-members"><input name="course_id" type="hidden" value="${c.id}"><label>Sinh viên<select name="add_student_id">${allowed.map(s=>`<option value="${esc(s.student_id)}">${esc(s.student_id)} · ${esc(s.full_name)}</option>`).join('')}</select></label>${enrollmentPolicy}<div class="ref-actions"><button class="btn btn-primary">Thêm vào lớp</button></div></form>`:'<p class="muted">Toàn bộ tài khoản sinh viên đã thuộc khóa học này.</p>');return;}
     if(e.target.closest('[data-members-import]')){window.adminDesign.modal('Nhập danh sách vào khóa học',`<form class="stack-form" data-action="course-members"><input name="course_id" type="hidden" value="${selected}"><label>Danh sách MSSV<textarea name="append_ids" required rows="6" placeholder="Mỗi dòng một MSSV, hoặc phân cách bằng dấu phẩy"></textarea></label><p class="muted">Bổ sung các tài khoản đã tồn tại vào lớp. Sinh viên đang có trong lớp được giữ lại.</p>${enrollmentPolicy}<div class="ref-actions"><button class="btn btn-primary">Thêm danh sách</button></div></form>`);return;}
@@ -152,6 +165,7 @@
           for(const selector of ['.attendance-detail-table','.attendance-session-detail>.ref-stats','.attendance-pagination']){
             const current=content.querySelector(selector),replacement=scratch.querySelector(selector);if(current&&replacement)current.replaceWith(replacement);
           }
+          window.classroomAttendance.decorate(content,data,course(),attendanceId);
         }
       }
     }catch(_){}finally{attendancePolling=false;}

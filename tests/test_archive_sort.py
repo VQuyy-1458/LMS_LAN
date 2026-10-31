@@ -38,6 +38,16 @@ class ArchiveOrderTests(unittest.TestCase):
                 self.assertEqual(result["rows"][0]["id"],"1")
                 self.assertEqual(result["rows"][0]["attempt_count"],2)
 
+    def test_activity_catalog_includes_kind_for_dependent_filter(self):
+        rows=self.records()[:1]
+        rows.append({**rows[0],"id":"code-1","kind":"code","activity_id":"code:exam:0","title":"Code Exam"})
+        with patch.object(archive,"_index",return_value=rows):
+            result=archive.listing({})
+        self.assertEqual(
+            {item["id"]:item["kind"] for item in result["activities"]},
+            {"assignment:task":"assignment","code:exam:0":"code"},
+        )
+
 
 if __name__=="__main__":
     unittest.main()

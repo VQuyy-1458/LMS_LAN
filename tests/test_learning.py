@@ -929,6 +929,25 @@ class LearningTests(unittest.TestCase):
         storage.write_json("settings.json", settings)
         self.assertEqual(self.request("/api/admin/students/s1/force-submit?exam=current", form={})[0], 409)
 
+    def test_admin_can_upload_exam_and_distribute_it_immediately(self):
+        exam_dir = Path(self.temp.name) / "new-exams"
+        with patch.object(exams, "EXAM_DIR", exam_dir):
+            self.assertEqual(self.request("/api/admin/exams/upload", "s1", {}, ("new.txt", b"Question"))[0], 403)
+            self.assertEqual(self.request("/api/admin/exams/upload", form={}, file=("new.csv", b"bad"))[0], 400)
+            self.assertEqual(self.request("/api/admin/exams/upload", form={}, file=("../outside.txt", b"bad"))[0], 400)
+            self.assertEqual(self.request("/api/admin/exams/upload", form={}, file=("empty.txt", b""))[0], 400)
+            code, result = self.request("/api/admin/exams/upload", form={}, file=("Đề mới.txt", b"Question"))
+            self.assertEqual(code, 201, result)
+            self.assertEqual(result["exam"]["name"], "Đề mới.txt")
+            self.assertEqual([row["name"] for row in result["exams"]], ["Đề mới.txt"])
+            self.assertEqual([row["name"] for row in self.request("/api/admin/exams")[1]["exams"]], ["Đề mới.txt"])
+            self.assertEqual((exam_dir / "Đề mới.txt").read_bytes(), b"Question")
+            self.assertEqual(self.request("/api/admin/exams/upload", form={}, file=("Đề mới.txt", b"Changed"))[0], 409)
+            self.assertEqual((exam_dir / "Đề mới.txt").read_bytes(), b"Question")
+            code, _ = self.request("/api/admin/distribute", form={"mode": "selected", "exam_files": "Đề mới.txt"})
+            self.assertEqual(code, 200)
+            self.assertEqual({row["exam_file"] for row in storage.read_json("assignments.json").values()}, {"Đề mới.txt"})
+
     def test_exam_course_context_controls_distribution_and_submission(self):
         c1 = self.course("s1")
         c2 = self.course("s2")

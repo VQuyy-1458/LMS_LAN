@@ -134,8 +134,8 @@ def listing(query):
         page = learning.integer(query, "page", 1, 1, 1000000)
         pages = max(1, math.ceil(len(rows)/10)); page = min(page, pages)
         scoped = [r for r in all_rows if not query.get("course") or r["course_id"] == query["course"]]
-        activities = {r["activity_id"]: r["title"] for r in scoped}
-        return {"rows": [public(r) for r in rows[(page-1)*10:page*10]], "total": total, "display_total": len(rows), "page": page, "pages": pages, "stats": stats, "activities": [{"id": k, "title": v} for k,v in sorted(activities.items(),key=lambda p:p[1].casefold())]}
+        activities = {r["activity_id"]: {"title": r["title"], "kind": r["kind"]} for r in scoped}
+        return {"rows": [public(r) for r in rows[(page-1)*10:page*10]], "total": total, "display_total": len(rows), "page": page, "pages": pages, "stats": stats, "activities": [{"id": activity_id, **activity} for activity_id,activity in sorted(activities.items(),key=lambda p:p[1]["title"].casefold())]}
 
 
 def find(key):

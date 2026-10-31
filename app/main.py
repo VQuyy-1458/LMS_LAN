@@ -35,7 +35,7 @@ from .accounts import parse_accounts
 from .http import inline_filename_header
 from .storage import initialize, read_json, write_json, audit, utc_now, transaction, atomic_transaction
 from .security import hash_password, verify_password, new_session, get_session, require_user, client_ip, login_allowed, record_login_failure, clear_login_failures, logout_session, revoke_student_sessions, check_origin, SecurityError, check_login_source
-from .exams import list_exam_files, distribute_exams, start_exam, start_exam_session, remaining_seconds
+from .exams import list_exam_files, add_exam_file, distribute_exams, start_exam, start_exam_session, remaining_seconds
 from .submissions import accept_submission
 from . import learning
 from . import notifications as student_notifications
@@ -667,6 +667,16 @@ class Handler(BaseHTTPRequestHandler):
                     raise ClientError(400, "Danh sách loại file nộp không hợp lệ.")
                 settings.update({"exam_duration_minutes":duration,"submission_policy":policy,"max_submissions":max_sub,"overwrite_previous":f.get("overwrite_previous","false").lower() in {"true","1","on","yes"},"exam_password_enabled":enabled,"accepted_submission_extensions":accepted_extensions}); write_json("settings.json",settings)
                 audit("admin.settings_updated",sess["user_id"],client_ip(req),{"exam_duration_minutes":duration,"submission_policy":policy,"max_submissions":max_sub,"exam_password_enabled":enabled}); return self._json({"ok":True,"settings":settings})
+            if path=="/api/admin/exams/upload":
+                sess=self._auth(req,"admin")
+                try:
+                    exam=add_exam_file(req.files.get("file"))
+                except FileExistsError as e:
+                    raise ClientError(409,str(e))
+                except ValueError as e:
+                    raise ClientError(400,str(e))
+                audit("admin.exam_file_uploaded",sess["user_id"],client_ip(req),{"filename":exam["name"],"size":exam["size"]})
+                return self._json({"exam":exam,"exams":list_exam_files()},201)
             if path=="/api/admin/distribute":
                 sess=self._auth(req,"admin"); mode=f.get("mode","random"); config={}
                 try:

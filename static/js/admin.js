@@ -205,14 +205,15 @@
     $("custom-fields")?.classList.toggle("hidden", event.target.value !== "custom");
     if (event.target.value === "custom") renderRemainderRules();
   });
-  $("select-all-exams")?.addEventListener("click", () => document.querySelectorAll('input[name="exam-choice"]').forEach((input) => { input.checked = true; }));
-  $("clear-all-exams")?.addEventListener("click", () => document.querySelectorAll('input[name="exam-choice"]').forEach((input) => { input.checked = false; }));
+  $("select-all-exams")?.addEventListener("click", () => { document.querySelectorAll('input[name="exam-choice"]').forEach((input) => { input.checked = true; }); if ($("distribution-mode")?.value === "custom") renderRemainderRules(); });
+  $("clear-all-exams")?.addEventListener("click", () => { document.querySelectorAll('input[name="exam-choice"]').forEach((input) => { input.checked = false; }); if ($("distribution-mode")?.value === "custom") renderRemainderRules(); });
   function selectedExamNames() {
     return [...document.querySelectorAll('input[name="exam-choice"]:checked')].map((input) => input.value);
   }
   function renderRemainderRules() {
     const box = $("remainder-rules");
     if (!box) return;
+    const previous = new Map([...box.querySelectorAll('.remainder-exam')].map((select) => [select.dataset.remainder, select.value]));
     const exams = selectedExamNames();
     const count = exams.length;
     if ($("custom-modulus")) $("custom-modulus").value = String(count);
@@ -222,7 +223,7 @@
       updateRemainderMap();
       return;
     }
-    box.innerHTML = Array.from({ length: count }, (_, remainder) => `<label class="remainder-row"><span>Chữ số cuối chia ${count} dư <strong>${remainder}</strong></span><select class="remainder-exam" data-remainder="${remainder}">${exams.map((exam) => `<option value="${escape(exam)}">${escape(exam)}</option>`).join("") || '<option value="">Chưa chọn đề</option>'}</select></label>`).join("");
+    box.innerHTML = Array.from({ length: count }, (_, remainder) => `<label class="remainder-row"><span>Chữ số cuối chia ${count} dư <strong>${remainder}</strong></span><select class="remainder-exam" data-remainder="${remainder}">${exams.map((exam) => `<option value="${escape(exam)}" ${previous.get(String(remainder)) === exam ? 'selected' : ''}>${escape(exam)}</option>`).join("") || '<option value="">Chưa chọn đề</option>'}</select></label>`).join("");
     updateRemainderMap();
   }
   function updateRemainderMap() {
@@ -235,7 +236,31 @@
     if ($("last-digit-map")) $("last-digit-map").value = JSON.stringify(map);
   }
   $("remainder-rules")?.addEventListener("change", updateRemainderMap);
-  document.querySelectorAll('input[name="exam-choice"]').forEach((input) => input.addEventListener("change", () => { if ($("distribution-mode")?.value === "custom") renderRemainderRules(); }));
+  $("exam-file-choices")?.addEventListener("change", (event) => { if (event.target.matches('input[name="exam-choice"]') && $("distribution-mode")?.value === "custom") renderRemainderRules(); });
+  $("exam-file-upload-form")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget, file = form.elements.file.files[0], button = form.querySelector('button[type="submit"]');
+    if (!file) return;
+    if (file.size > 45 * 1024 * 1024) return show("exam-file-upload-result", "File đề vượt giới hạn 45 MiB.", true);
+    button.disabled = true;
+    try {
+      const result = await window.cssRequest("/api/admin/exams/upload", { method: "POST", body: new FormData(form) });
+      const choices = $("exam-file-choices"), known = new Set([...choices.querySelectorAll('input[name="exam-choice"]')].map((input) => input.value));
+      for (const exam of result.exams) {
+        if (known.has(exam.name)) continue;
+        const label = document.createElement("label"), input = document.createElement("input");
+        label.className = "checkbox-row"; input.type = "checkbox"; input.name = "exam-choice"; input.value = exam.name;
+        input.checked = exam.name === result.exam.name; label.append(input, document.createTextNode(" " + exam.name)); choices.append(label);
+        for (const id of ["even-exam", "odd-exam"]) $(id)?.add(new Option(exam.name, exam.name));
+      }
+      $("empty-exam-files")?.remove();
+      if ($("distribute-exams-button")) $("distribute-exams-button").disabled = $("distribute-exams-button").dataset.released === "true";
+      if ($("distribution-mode")?.value === "custom") renderRemainderRules();
+      show("exam-file-upload-result", `Đã thêm đề ${result.exam.name}. Đề đã sẵn sàng để phân phối.`);
+      form.reset();
+    } catch (error) { show("exam-file-upload-result", error.message, true); }
+    finally { button.disabled = false; }
+  });
   document.querySelectorAll('input[name="notification_scope"]').forEach((radio) => radio.addEventListener("change", () => $("notification-picker")?.classList.toggle("hidden", radio.value !== "selected" || !radio.checked)));
   $("notification-search")?.addEventListener("input", renderNotificationStudents);
   $("notification-students")?.addEventListener("change", (event) => { const input=event.target; if(input.name!=="notification_student")return; if(input.checked)notificationRecipients.add(input.value);else notificationRecipients.delete(input.value);updateSelectedCount(); });
