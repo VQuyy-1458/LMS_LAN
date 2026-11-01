@@ -1,497 +1,529 @@
-# LMS_LAN
+﻿# LAN LMS — Hệ thống quản lý học tập và thi trong mạng LAN
 
-Mã nguồn hệ thống quản lý học tập và thi trên mạng LAN, gồm hai vai trò giảng viên/quản trị và sinh viên, thi nộp file và thi lập trình với bộ chấm Docker.
+LAN LMS (Classroom Submission Server) là hệ thống web dành cho lớp học/phòng máy: quản lý khóa học, học liệu, lịch học, điểm danh QR, bài tập, thi nộp file, chấm lập trình và bảng điểm. Giảng viên chạy server; sinh viên dùng trình duyệt trên cùng mạng LAN, không cần cài client.
 
-Repo chỉ chứa mã nguồn, tài nguyên giao diện và kiểm thử. Tài khoản, phiên đăng nhập, điểm, đề thi đang sử dụng, bài nộp, log và backup được giữ riêng trên máy chạy, không đưa lên GitHub. Sau khi clone, chạy `setup_windows.bat` để cài môi trường, rồi nhấp đúp `CHAY_WEB_LAN.bat`; tạo tài khoản admin riêng theo hướng dẫn bên dưới. Các script tạo dữ liệu demo dùng thông tin mẫu công khai, chỉ dành cho thử nghiệm.
+Dự án thuộc học phần **Lập trình mạng**, năm học **2026–2027**. Backend xử lý HTTP trên TCP bằng thư viện chuẩn Python, lưu metadata JSON và chạy bài lập trình trong Docker.
 
-**Chạy nhanh trên Windows:** nhấp đúp [CHAY_WEB_LAN.bat](CHAY_WEB_LAN.bat). Web tự mở và hiện địa chỉ cho các máy cùng LAN; xem [hướng dẫn](docs/CHAY_WEB_LAN.md).
+## 1. Chức năng
 
-**Dữ liệu mẫu đầy đủ:** sau khi cài môi trường và tạo admin, dừng server rồi chạy `python -m scripts.seed_full_demo_once` (trên Windows có thể dùng `.venv\Scripts\python.exe`). Script tạo 10 tài khoản DEMO (`DEMO001`–`DEMO010`, mật khẩu mẫu `01012005`), 3 khóa học, lịch học cả tuần, 4 kỳ thi mỗi khóa, tài liệu, bài nộp đã chấm và bảng điểm đầy đủ. Nếu khóa `LTM-DEMO` đã có sẵn, script bổ sung điểm cho khóa đó. Chạy lại chỉ kiểm tra dữ liệu, không nhân bản bản ghi. Các điểm chuyên cần, giữa kỳ và cuối kỳ là điểm mẫu nhập tay; dữ liệu runtime vẫn chỉ lưu trên máy chạy và không được đưa lên GitHub.
+Có hai vai trò: **Admin/giảng viên** và **Sinh viên**. Các admin có quyền quản trị chung; chưa phân quyền giảng viên theo từng khóa.
 
-Trên Windows, có thể nhấp đúp [TAO_DATA_DEMO.bat](TAO_DATA_DEMO.bat) sau khi chạy `setup_windows.bat` và đóng web. Script tạo dữ liệu mẫu ngay trên máy vừa clone; nếu chưa có admin, chạy `.venv\Scripts\python.exe -m app.setup_admin` trước khi đăng nhập quản trị.
+| Phân hệ | Admin/giảng viên | Sinh viên |
+| --- | --- | --- |
+| Tài khoản | Nhập danh sách, khóa/mở, reset mật khẩu, gỡ khóa đăng nhập tạm, tạo admin | Đăng nhập, xem hồ sơ, đổi mật khẩu |
+| Khóa học | Tạo/sửa, quản lý thành viên, nhập/xuất gói khóa, tổng kết | Xem khóa được tham gia và đã tổng kết |
+| Học liệu | Đăng tài liệu theo khóa/chủ đề | Xem trước, tải về |
+| Lịch | Tạo buổi học, thông báo, lịch thi | Xem lịch tháng và hoạt động sắp tới |
+| Bài tập | Giao bài, đính kèm đề, đặt hạn/số lượt, chấm và phản hồi | Nộp/nộp lại, xem phiên bản và nhận xét |
+| Điểm danh | Mở phiên từ buổi học, hiển thị QR, điều chỉnh kết quả kèm lý do | Quét camera/ảnh QR, xem lịch sử |
+| Thi nộp file | Phân phối đề, bắt đầu/kết thúc, gia hạn, ép thu bài | Nhận đề, xem giờ, nộp file |
+| Thi lập trình | Tạo bài toán/test, mở thi, xem kết quả, chấm lại | Nộp C/C++/Java/Python, xem điểm |
+| Giám sát | Theo dõi online, IP, trình duyệt, tab/cửa sổ và bài nộp | Cập nhật hiện diện khi dùng trang |
+| Kho bài nộp | Tra cứu bài tập/file/code, lịch sử chấm, xuất CSV/ZIP | Xem/tải bài cá nhân còn lưu |
+| Bảng điểm | Trọng số, điểm ghi đè, tổng kết | Xem thành phần và tổng kết |
+| Thông báo | Gửi chung hoặc theo người nhận | Chuông, lọc, đánh dấu đọc |
 
-**Luồng thi hiện tại:** [kiểm tra/chấm thử trước khi mở thi, chờ đúng lịch, sửa thời gian khi đang thi và bản nháp giảng viên](docs/EXAM_WORKFLOWS_2026-10-30.md). [Quy tắc tính điểm theo ngày tham gia khóa học](docs/ENROLLMENT_GRADING_2026-10-30.md).
+## 2. Kiến trúc và công nghệ
 
-> **A lightweight, self-hosted Learning Management System (LMS) for exams — designed for classroom LAN use today, with a roadmap toward public web-server hosting.**
-
-Classroom Submission Server (CSS) supports courses, materials, assignments, QR attendance, notifications, weighted gradebooks, file exams and programming exams with a Docker judge. The Admin can monitor student status, adjust file-exam time, manage submissions and send notifications from the web interface.
-
-The latest reliability work adds recoverable JSON transactions, submission retry protection, verified backups and request resource limits. See [backend changes, validation and operating commands](docs/BACKEND_HARDENING_2026-10-29.md) and the [full project review](docs/FULL_PROJECT_AUDIT_2026-10-29.md).
-
-Currently runs on a local area network (LAN) from the instructor's machine. The next milestone is a production-ready public web-server deployment.
-
----
-
-## Table of Contents
-
-1. [Overview](#1-overview)
-2. [Roadmap](#2-roadmap)
-3. [Architecture](#3-architecture)
-4. [Features](#4-features)
-5. [Directory Structure](#5-directory-structure)
-6. [Requirements](#6-requirements)
-7. [Setup on Windows](#7-setup-on-windows)
-8. [Setup on macOS / Linux](#8-setup-on-macos--linux)
-9. [Running the Server](#9-running-the-server)
-10. [First-Time Configuration](#10-first-time-configuration)
-11. [Exam Workflow](#11-exam-workflow)
-12. [Network & TLS](#12-network--tls)
-13. [Offline Operation](#13-offline-operation)
-14. [Backup & Recovery](#14-backup--recovery)
-15. [Running Tests](#15-running-tests)
-16. [Troubleshooting](#16-troubleshooting)
-17. [Security Notes](#17-security-notes)
-
----
-
-## 1. Overview
-
-CSS is a **focused exam-delivery LMS** built for instructors who need tight control over a live exam session. Unlike general LMS platforms, it is purpose-built around the exam lifecycle:
-
-| What a typical LMS does | What CSS adds on top |
-|---|---|
-| Distribute course materials | Distribute unique exam files per student (random / parity / custom rules) |
-| Accept assignment uploads | Validate ZIP archives (signature, CRC, path traversal) before saving |
-| Show student progress | **Live dashboard**: online status, time remaining, submission count — refreshed automatically |
-| Basic role separation | **Admin real-time controls**: adjust per-student time, force-submit, broadcast notifications, lock accounts |
-| Passive audit trail | **Active telemetry**: detects tab-switching, unfocused windows, and multiple open tabs |
-
-Everything runs as a **single Python process** using only the standard library plus [Jinja2](https://jinja.palletsprojects.com/) for HTML templating. No FastAPI, Pydantic, Uvicorn, Starlette, WebSockets, MySQL, or PostgreSQL required.
-
-> **Why no FastAPI / Pydantic?**
-> Some institutional Windows environments enforce Device Guard / Application Control policies that block native extension DLLs such as `_pydantic_core`. This server was rewritten to avoid those dependencies entirely.
-
----
-
-## 2. Roadmap
-
-The project currently targets **LAN / classroom deployment**. The next milestone is a **production-ready public web server** so any student with an internet connection can participate without needing to be on the same network.
-
-### ✅ Current (v0.x — LAN)
-- Full exam workflow on a local network
-- Admin dashboard with real-time monitoring and controls
-- TLS support via environment variables
-- Offline-capable (no CDN, no internet required at runtime)
-
-### 🚧 In Progress / Planned (v1.x — Public Web Server)
-
-| Feature | Status | Notes |
-|---|---|---|
-| Deploy behind Nginx + HTTPS (Let's Encrypt) | Planned | Nginx as reverse proxy; Certbot for TLS |
-| Run as a systemd service on Linux VPS | Planned | Auto-restart, logging via journald |
-| Browser POST origin checks and SameSite cookies | Implemented | Verify trusted-origin/proxy configuration for the deployment |
-| Per-IP rate limiting on upload endpoints | Planned | Prevent abuse of the 50 MiB upload endpoint |
-| SQLite storage backend | Optional future migration | Current JSON storage has transaction staging, recovery journals and a single-instance lease |
-| Persistent volume for `data/`, `submissions/`, `de-thi/` | Planned | Required for cloud / containerised deployments |
-| Application container deployment | Planned | The programming judge already runs in restricted Docker containers |
-| Multi-course support | Implemented | Courses, assignments and programming exams; one active file-exam engine |
-
-> Contributions toward any roadmap item are welcome. See [Security Notes](#17-security-notes) for the current limitations that must be addressed before exposing the server to the public internet.
-
----
-
-## 3. Architecture
-
-| Component | Choice | Rationale |
-|---|---|---|
-| HTTP server | `http.server.ThreadingHTTPServer` (stdlib) | No third-party runtime dependency for the server itself |
-| Form / multipart parsing | `urllib` + `email` (stdlib) | Eliminates `python-multipart` |
-| HTML rendering | Jinja2 (only external runtime dep.) | Reuses existing templates; MarkupSafe ships a pure-Python fallback |
-| CSS | Tailwind CSS pre-built → local `app.css` | No CDN calls at runtime |
-| Icons | Font Awesome 4.7.0 (local files) | No external font loading at runtime |
-| Dashboard refresh | HTTP polling every 5 seconds | No WebSocket library needed |
-| Data storage | JSON / JSONL files | Simple, human-readable, easy to back up *(SQLite planned — see Roadmap)* |
-| Passwords | `hashlib.scrypt` + per-user salt | Passwords are never stored in plain text |
-| Sessions | Random token in `HttpOnly` cookie; only SHA-256 hash stored server-side | Leaking the session file does not expose a usable bearer token |
-| Submissions | ZIP files saved to `submissions/` | Compatible with existing submission workflows |
-
----
-
-## 4. Features
-
-### Student experience
-- Login with student ID; date of birth is the initial password (not stored after creation).
-- Cannot see the exam file or its name before clicking **Start**.
-- Optionally enter an exam password before starting (if configured by admin).
-- Countdown timer displayed; `started_at` and `ends_at` are set by the **server clock** — changing the local machine clock has no effect.
-- Submit a `.zip` file; the server validates the archive before saving.
-- Receives broadcast notifications from the admin in real time (polled every 5 s).
-
-### Admin real-time monitoring & control
-
-This is where CSS goes beyond a typical LMS. The admin dashboard gives live visibility and direct control over every student during an active exam:
-
-| Control | Description |
-|---|---|
-| **Live student list** | Online/offline status, last-seen timestamp, current IP, User-Agent |
-| **Exam progress** | Assigned exam file, start time, time remaining (per student) |
-| **Submission status** | Number of attempts, latest submission time and file hash |
-| **Tab / focus telemetry** | Flags when a student switches tabs, loses window focus, or opens multiple tabs |
-| **Per-student time adjustment** | Add or subtract minutes from an individual student's deadline without affecting others |
-| **Force-submit** | Mark a student's exam as submitted when they cannot submit themselves |
-| **Broadcast notifications** | Send a message to all students or specific students; appears on their screen within the next polling cycle |
-| **Account lock / unlock** | Lock a student account mid-exam if needed |
-| **Password reset** | Reset any student's password instantly |
-| **End exam** | Close the current session; students can no longer start or submit |
-
-### Account management
-- Bulk import from `.txt` file or pasted text (`StudentID | DateOfBirth | FullName`).
-- Duplicate detection and per-line error reporting during import.
-- Create additional admin accounts.
-- Full audit log: every action is recorded in `logs/audit.jsonl`.
-
-### Exam distribution modes
-- **`random`** — shuffles the exam pool; tries to give adjacent IP addresses different exams.
-- **`parity`** — assigns exam A or B based on whether the last digit of the student ID is odd or even.
-- **`custom`** — maps each last digit (0–9) to a specific exam file.
-- Distribution is a **locked, one-way action** per session — prevents re-distribution mid-exam.
-
-### Submission validation
-- Only `.zip` files accepted; magic bytes verified.
-- Max upload: **50 MiB**. Max ZIP entries: **3,000**. Max uncompressed size: **250 MiB**.
-- Path traversal and unsafe archive entries are rejected. Archive is **never extracted to disk**.
-
----
-
-## 5. Directory Structure
-
-```text
-ClassroomSubmissionServer/
-├── app/
-│   ├── config.py            # Directories, limits, and policy constants
-│   ├── accounts.py          # Account list parsing and validation
-│   ├── storage.py           # Atomic JSON writes and JSONL audit log
-│   ├── security.py          # Password hashing, sessions, lockout, origin check
-│   ├── exams.py             # Exam scanning, distribution logic, server clock
-│   ├── submissions.py       # ZIP validation and file saving
-│   ├── main.py              # ThreadingHTTPServer, routing, and HTML rendering
-│   ├── configure_admin.py   # Interactive admin setup helper
-│   └── setup_admin.py       # First-run admin bootstrap CLI
-├── templates/               # Jinja2 HTML templates (login, admin dashboard, student)
-├── static/
-│   ├── css/                 # Pre-built CSS (Tailwind output)
-│   ├── js/                  # Client-side JavaScript
-│   └── vendor/fontawesome/  # Font Awesome 4.7.0 (local copy + license)
-├── data/                    # Runtime JSON data (auto-created)
-├── logs/                    # audit.jsonl (auto-created)
-├── de-thi/                  # Place exam files here (PDF, TXT, PNG, JPG, JPEG, GIF, WEBP)
-├── submissions/             # Student ZIP submissions (auto-created)
-├── tests/
-│   └── test_core.py         # Unit tests
-├── requirements.txt         # Jinja2 only
-├── setup_windows.bat        # One-click Windows setup
-├── start_windows.bat        # One-click Windows start
-├── start_unix.sh            # macOS/Linux start script
-├── run_server.py            # Server entry point
-└── submission_server.py     # Legacy launcher alias
+```mermaid
+flowchart TD
+    A[Trình duyệt giảng viên] -->|HTTP/HTTPS trên TCP| S
+    B[Trình duyệt sinh viên] -->|HTTP/HTTPS trên TCP| S
+    S[Python HTTP server] --> T[Jinja2 và HTML/CSS/JavaScript]
+    S --> L[Khóa học, tài khoản, thi, điểm danh, bài nộp]
+    L --> D[JSON, journal giao dịch, audit]
+    L --> F[Kho học liệu, đề thi, bài nộp]
+    L --> Q[Hàng đợi chấm - 2 worker]
+    Q --> C[Docker Linux - biên dịch và chạy test]
+    C --> D
+    W[Worker hạn nộp và sao lưu] --> D
+    W --> F
 ```
 
----
+| Thành phần | Công nghệ |
+| --- | --- |
+| Backend | Python; http.server, socket, ssl, threading, concurrent.futures |
+| Template | Jinja2 >=3.1,<4, dependency trực tiếp duy nhất trong requirements.txt |
+| Frontend | HTML, CSS, JavaScript thuần; Tailwind CSS 3.4.17 để build CSS |
+| QR/icon | ZXing Browser 0.2.1 và Font Awesome trong static/vendor/ |
+| Lưu trữ | JSON, payload file riêng, audit JSON Lines |
+| Chấm code | Docker CLI; Debian Bookworm, GCC/G++, OpenJDK 17, Python 3 |
+| Kiểm thử | Python unittest, Node.js, Chrome/Chromium/Edge qua CDP |
 
-## 6. Requirements
+Không cần FastAPI, Uvicorn, Pydantic, database server hoặc Node.js để chạy web khi asset đầy đủ. Asset frontend phục vụ từ server, không cần CDN khi dùng trong LAN.
 
-- **Python 3.10 or later** (3.12 / 3.13 recommended).
-- **Jinja2 ≥ 3.1, < 4** — the only runtime dependency outside the standard library.
-- No database server, Node.js, or internet connection is needed once Jinja2 is installed.
-- Place the project folder in a location where the running user has **write access** (e.g. `C:\ClassroomSubmissionServer\` on Windows). Avoid `Program Files` or cloud-synced folders during exams.
+### Đồng thời và độ bền dữ liệu
 
----
+- HTTP dùng thread theo kết nối, tối đa **128 worker**, backlog **128**; quá tải trả 503 và Retry-After.
+- RLock bảo vệ trạng thái dùng chung. Các luồng tương ứng tách nhận body/gửi response khỏi khóa nghiệp vụ để hạn chế client chậm giữ khóa.
+- JSON ghi qua file tạm, fsync và os.replace. Giao dịch nhiều cập nhật JSON/audit có journal để phục hồi thao tác gián đoạn; payload lưu trước metadata.
+- OS lease ngăn server và CLI đã tích hợp cùng sửa một bộ dữ liệu. Mỗi bộ dữ liệu chỉ chạy **một tiến trình server**.
+- Worker kiểm tra hạn khoảng mỗi giây, quét lại bài chờ chấm khoảng mỗi 10 giây. Hết hạn không phụ thuộc sinh viên giữ trang mở.
 
-## 7. Setup on Windows
+## 3. Yêu cầu và cài đặt
 
-### Option A — Automated (recommended)
+### Môi trường
 
-1. Extract `ClassroomServer.zip` or clone the repository.
-2. Open the `ClassroomSubmissionServer` folder.
-3. Double-click **`setup_windows.bat`**.
-   - Creates a `.venv` virtual environment inside the project.
-   - Installs Jinja2 into the venv (not the system Python).
-4. When setup completes, double-click **`start_windows.bat`** to launch (see §9).
+- Python **3.10 trở lên** theo cú pháp/API sử dụng; dự án có dấu vết môi trường Python 3.13/3.14. Tạo lại virtual environment trên máy đích.
+- Trình duyệt hiện đại có JavaScript, client kết nối được server qua LAN.
+- Docker Engine/Desktop chạy **Linux containers** nếu dùng thi lập trình.
+- Node.js/npm khi build CSS hoặc kiểm thử JavaScript. Browser QA cần Node.js có WebSocket toàn cục, chẳng hạn Node.js 22 trở lên.
+- Đĩa đủ chứa image, học liệu, mọi phiên bản bài nộp và backup. Công cụ check cảnh báo dưới 512 MiB trống; đây không phải mức dung lượng khuyến nghị cho cả hệ thống.
 
-### Option B — Manual
+### Windows: dùng script
 
-Open **Command Prompt** in the project folder:
+Mở terminal tại thư mục gốc:
 
-```bat
+```powershell
+.\setup_windows.bat
+.\start_windows.bat
+```
+
+Setup tạo .venv và cài dependency. Start cấu hình admin qua console, chạy server nền rồi mở http://127.0.0.1:8080/login. Nhấn Enter để giữ tên/mật khẩu admin hiện có. Start cũng nhận .venv-windows nếu không có .venv\Scripts\python.exe.
+
+Bước mở trình duyệt của script Windows dùng cố định HTTP cổng 8080. Khi đổi cổng hoặc bật HTTPS, chạy trực tiếp.
+
+### Windows: chạy trực tiếp
+
+```powershell
 py -m venv .venv
-.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m app.setup_admin
+.\.venv\Scripts\python.exe run_server.py
 ```
 
-If `py` is not available, try `python -m venv .venv` on the first line. Always use `.venv\Scripts\python.exe -m pip`, not `pip.exe` directly.
+Chỉ chạy setup_admin khi cần tạo admin mới; không có mật khẩu admin mặc định được bảo đảm. Để giữ/cập nhật admin hiện có, dùng app.configure_admin khi server đã dừng.
 
-### Offline install
-
-If the machine has no internet access, obtain `Jinja2` and `MarkupSafe` wheels from IT and install with:
-
-```bat
-.venv\Scripts\python.exe -m pip install --no-index --find-links <wheel_folder> -r requirements.txt
-```
-
----
-
-## 8. Setup on macOS / Linux
+### Linux/macOS
 
 ```bash
 python3 -m venv .venv
-./.venv/bin/python -m pip install --upgrade pip
-./.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python -m app.setup_admin
+bash start_unix.sh
 ```
 
-Do **not** use `sudo pip install`. Keep dependencies inside the `.venv`.
+Có thể chạy .venv/bin/python run_server.py trực tiếp. submission_server.py là entry point tương thích, gọi cùng backend. Giữ terminal chạy, nhấn Ctrl+C để dừng.
 
----
+### Client và build giao diện
 
-## 9. Running the Server
+1. Xem LAN URL trong console hoặc mục **Địa chỉ LAN** phía admin.
+2. Sinh viên mở http://<IP-server>:8080/login, ví dụ http://192.168.1.10:8080/login.
+3. Cho phép cổng server trong firewall mạng phòng học; kiểm tra VPN/Wi-Fi isolation nếu không kết nối được.
 
-### Windows
+127.0.0.1 trỏ tới máy đang mở trình duyệt; 0.0.0.0 là địa chỉ bind, không phải URL cho sinh viên.
 
-Double-click **`start_windows.bat`**. The script will:
-1. Prompt for admin credentials (or skip if already configured).
-2. Start the server.
-3. Wait for the health endpoint to respond.
-4. Open the browser at `http://127.0.0.1:8080/login`.
+Nếu thiếu hoặc thay đổi CSS:
 
-Manual start:
-```bat
-.venv\Scripts\python.exe run_server.py
-```
-
-### macOS / Linux
-
-```bash
-chmod +x start_unix.sh
-./start_unix.sh
-```
-
-Or manually:
-```bash
-./.venv/bin/python run_server.py
-```
-
-The terminal prints both the **local URL** (`http://127.0.0.1:8080`) and one or more **LAN URLs** (e.g. `http://192.168.1.10:8080`). Share the LAN URL with students.
-
-### Changing the port
-
-If port `8080` is already in use:
-
-**Windows (PowerShell):**
 ```powershell
-$env:CSS_PORT = "8081"
+npm install
+npm run build
+```
+
+Build biên dịch assets/tailwind.input.css thành static/css/tailwind.css. Không cần frontend development server riêng.
+
+### Bộ chấm
+
+```powershell
+docker build -t classroom-judge:1 ./judge
+```
+
+Docker phải chạy trước khi mở thi code. Build cần mạng để tải image/package; lúc chấm dùng image có sẵn với --pull=never. LMS và thi file dùng được khi không có Docker, nhưng readiness tổng thể sẽ báo bộ chấm chưa sẵn sàng.
+
+## 4. Cấu hình
+
+Biến môi trường đọc khi khởi động; backend không tự nạp .env.
+
+| Biến | Mặc định | Ý nghĩa |
+| --- | --- | --- |
+| CSS_HOST | 0.0.0.0 | Địa chỉ lắng nghe |
+| CSS_PORT | 8080 | Cổng HTTP/HTTPS |
+| CSS_DATA_ROOT | Gốc dự án | Gốc runtime, không đổi template/static |
+| CSS_TLS_CERT / CSS_TLS_KEY | Không đặt | Chứng chỉ/khóa TLS, phải đặt cả hai |
+| CSS_ALLOWED_ORIGINS | Không đặt | Origin bổ sung, phân cách dấu phẩy; mặc định so Origin với Host/scheme |
+| CSS_REQUEST_IDLE_TIMEOUT | 30 giây | Timeout socket/chờ dữ liệu |
+| CSS_REQUEST_BODY_TIMEOUT | 300 giây | Hạn tổng nhận body |
+| CSS_JUDGE_IMAGE | classroom-judge:1 | Image chấm |
+| CSS_JUDGE_TESTS | Không đặt | Đặt 1 để bật test Docker thật |
+| CSS_TEST_PYTHON | Tự tìm venv | Python cho kiểm thử Node.js |
+| CSS_TEST_CHROME | Tự tìm trình duyệt | File thực thi trình duyệt QA |
+
+```powershell
+$env:CSS_PORT = '8090'
 .\.venv\Scripts\python.exe run_server.py
 ```
 
-**macOS / Linux:**
-```bash
-export CSS_PORT=8081
-./.venv/bin/python run_server.py
-```
+HTTPS với chứng chỉ đã chuẩn bị và được client tin cậy:
 
-To find the process using port 8080 on Windows (see §9 for the port option):
-```bat
-netstat -ano | findstr :8080
-```
-Identify the PID in the last column using Task Manager before killing it.
-
----
-
-## 10. First-Time Configuration
-
-### Create the first admin account
-
-**Windows:**
-```bat
-.venv\Scripts\python.exe -m app.setup_admin
-```
-
-**macOS / Linux:**
-```bash
-./.venv/bin/python -m app.setup_admin
-```
-
-Enter a username and a password of at least 6 characters. Passwords are stored as a `scrypt` hash — they cannot be recovered, only reset.
-
-### Student account template
-
-Download the import template from the admin dashboard or find the sample at `student_accounts_template.txt`.
-
-Each line follows the format:
-```
-StudentID | DateOfBirth | FullName
-```
-
-Lines starting with `#` and blank lines are ignored. Leading/trailing whitespace is trimmed automatically. The date of birth is used as the student's initial password and is **not stored** after account creation.
-
----
-
-## 11. Exam Workflow
-
-```
-Admin sets up exam
-       ↓
-Place exam files in de-thi/
-       ↓
-Admin configures settings (duration, submission policy, distribution mode)
-       ↓
-Admin clicks "Distribute" → server assigns an exam file to each student
-       ↓
-Students log in → click "Start" → server records started_at and ends_at
-       ↓
-Students view their assigned exam and work on their submission
-       ↓
-Students upload a .zip file before the deadline
-       ↓
-Admin downloads submissions from the dashboard
-       ↓
-Admin clicks "End Exam" to close the session before starting a new one
-```
-
-**Key rules:**
-- Exam distribution is a **one-way, locked action** — once distributed, the configuration cannot be changed and cannot be re-distributed without ending the current session.
-- The server clock governs all deadlines. Client-side countdowns are display only.
-- Students cannot open their exam file until they click **Start**.
-- Late submissions (after `ends_at`) are rejected by the server.
-
-### Supported exam file types
-`.pdf`, `.txt`, `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`
-
-### Submission validation
-- File must be a valid `.zip` (magic bytes verified).
-- Maximum upload size: **50 MiB**.
-- Maximum number of ZIP entries: **3,000**.
-- Maximum total uncompressed size: **250 MiB**.
-- Path traversal and unsafe archive entries are rejected.
-- The archive is **never extracted to disk**.
-
----
-
-## 12. Network & TLS
-
-- Allow **TCP port 8080** (or your chosen port) through the firewall on the instructor's machine — only on the Private/trusted LAN, not on the internet.
-- By default the server uses **HTTP** (unencrypted). Suitable for a closed, trusted classroom LAN.
-
-### Enabling HTTPS (optional)
-
-Obtain a certificate and private key trusted by student machines.
-
-**Windows (PowerShell):**
 ```powershell
-$env:CSS_TLS_CERT = "C:\certs\server.crt"
-$env:CSS_TLS_KEY  = "C:\certs\server.key"
+$env:CSS_TLS_CERT = 'D:\certs\server.crt'
+$env:CSS_TLS_KEY = 'D:\certs\server.key'
 .\.venv\Scripts\python.exe run_server.py
 ```
 
-**macOS / Linux:**
-```bash
-export CSS_TLS_CERT="$HOME/certs/server.crt"
-export CSS_TLS_KEY="$HOME/certs/server.key"
-./.venv/bin/python run_server.py
-```
+Thời lượng, thí sinh, định dạng/số lượt nộp, mật khẩu đề và trọng số cấu hình qua admin. JSON nền được tạo khi cần; không cần SQL migration. Source có sẵn dữ liệu sẽ giữ dữ liệu hiện có.
 
-When TLS is active, session cookies gain the `Secure` flag. Self-signed certificates will trigger browser warnings unless installed as trusted on each student machine.
+## 5. Quy trình sử dụng
 
----
+### Tài khoản và khóa học
 
-## 13. Offline Operation
+1. Nhập sinh viên theo [student_accounts_template.txt](student_accounts_template.txt):
 
-The server is **fully offline after the one-time Jinja2 installation**:
-
-- CSS and Font Awesome are bundled locally — no CDN calls.
-- The dashboard polls a local API endpoint.
-- No Node.js or npm is needed to run the server. `package.json` and `tailwind.config.js` are only present for rebuilding CSS assets from source (development use only).
-
----
-
-## 14. Backup & Recovery
-
-| Path | Contents |
-|---|---|
-| `data/*.json` | Accounts, sessions, settings, assignments, submission metadata, lockout state |
-| `logs/audit.jsonl` | Append-only event log |
-| `de-thi/` | Exam source files |
-| `submissions/` | Student ZIP payloads |
-
-**Always stop the server before backing up.** Copy all four directories above to a safe location.
-
-- Do **not** edit JSON files manually while the server is running.
-- Run only **one** server instance against the same data directory. The JSON-file locking model is single-process only *(SQLite migration planned — see [Roadmap](#2-roadmap))*.
-
----
-
-## 15. Running Tests
-
-From the project root:
-
-**Windows:**
-```bat
-.venv\Scripts\python.exe -m compileall app run_server.py tests
-.venv\Scripts\python.exe -m unittest discover -s tests -v
-```
-
-**macOS / Linux:**
-```bash
-./.venv/bin/python -m compileall app run_server.py tests
-./.venv/bin/python -m unittest discover -s tests -v
-```
-
-After starting the server, visit `/health`. A healthy server responds with:
-```json
-{"status": "ok"}
-```
-
-**Recommended pre-exam checklist:**
-1. Compile and run the unit tests (above).
-2. Start the server and verify `/health`.
-3. Log in as admin, import a test student account, place a sample exam file in `de-thi/`.
-4. Configure the exam and distribute.
-5. Log in as the test student, start the exam, and submit a sample ZIP.
-6. Verify the submission appears in the admin dashboard and can be downloaded.
-
----
-
-## 16. Troubleshooting
-
-### Windows: `Application Control policy has blocked this file`
-
-This server no longer depends on FastAPI, Pydantic, or `_pydantic_core`. If the error still appears:
-
-1. Stop the server and delete the old `.venv`:
-   ```bat
-   rmdir /s /q .venv
+   ```text
+   MSSV|Ngày sinh|Họ tên
+   21010001|01/02/2003|Nguyen Van A
+   21010002|15/08/2003|Tran Thi B
    ```
-2. Re-run `setup_windows.bat` to create a fresh environment.
-3. If Device Guard / App Control still blocks Python itself or Jinja2, do **not** disable the policy, rename DLLs, or run as Administrator to bypass it. Contact IT and request that your Python environment and required packages be approved.
-4. If the package index is also blocked, ask IT to provide approved wheels.
 
-### Port already in use
+   Mỗi dòng đúng ba trường. Mật khẩu khởi tạo là **nguyên chuỗi ngày sinh** đã nhập. Tài khoản tồn tại được bỏ qua; dữ liệu sai báo theo dòng.
+2. Tạo khóa, tên/mã/nhóm/học kỳ và thành viên. Hỗ trợ khóa toàn bộ sinh viên hoặc danh sách riêng.
+3. Thêm học liệu, lịch và bài tập. Bài tập có hạn, tối đa 1–20 lượt theo cấu hình; giữ các phiên bản nộp.
+4. Sinh viên dùng cửa sổ/hồ sơ trình duyệt khác admin để tránh ghi đè cookie giữa hai vai trò.
+5. Giảng viên chấm/phản hồi; sinh viên xem điểm và lịch sử.
 
-Find the conflicting process (see §9), stop it, or change the port via `CSS_PORT`.
+### Điểm danh QR
 
-### Server started but students cannot connect
+Tạo buổi học trong lịch rồi mở phiên từ buổi đó. Sinh viên vào **Điểm danh**, quét camera hoặc chọn ảnh QR. Backend kiểm tra thành viên, mã, hạn và trạng thái phiên. Quét lại không tạo trùng, không tự ghi đè quyết định Vắng của giảng viên.
 
-- Make sure the firewall on the instructor's machine allows inbound TCP on port 8080 for the Private network.
-- Share the correct **LAN IP** printed in the terminal — not `127.0.0.1`.
-- If the machine has multiple network interfaces (Wi-Fi, VPN, Docker bridge), pick the IP on the same subnet as the student machines.
+HTTPS/localhost hỗ trợ camera video. HTTP trên IP LAN có thể bị hạn chế getUserMedia; có luồng chụp/chọn ảnh. Liên kết QR giữ qua bước đăng nhập để tiếp tục điểm danh.
 
-### Browser shows stale content after a code update
+### Thi nộp file
 
-Stop all running server instances, then restart with the correct start script. Clearing the browser cache is a secondary step; the priority is ensuring the new server process is actually running.
+1. Đặt đề trong de-thi/ dưới gốc runtime: PDF, TXT, PNG, JPG/JPEG, GIF, WEBP.
+2. Vào **Cấu hình kỳ thi**, chọn khóa, loại đánh giá (kiểm tra/giữa kỳ/cuối kỳ), thời lượng, thí sinh và chính sách nộp.
+3. Phát đề rồi bắt đầu. Lưu được nhiều cấu hình, nhưng engine thi file chỉ chạy **một lượt phát đề tại một thời điểm**.
+4. Sinh viên bắt đầu, nhập mật khẩu đề nếu bật, nhận đề và nộp đúng định dạng; mặc định ZIP.
+5. Admin theo dõi, gia hạn cá nhân, ép thu bài hoặc kết thúc để chặn nộp mới.
 
-### `file://` URLs do not work
+| Chế độ | Phân phối |
+| --- | --- |
+| random | Nhóm subnet IPv4 /24 hoặc IPv6 /64, sắp IP, luân phiên bộ đề đã xáo trộn |
+| selected | Luân phiên danh sách chọn sau khi xáo trộn thứ tự đề |
+| parity | Theo chữ số cuối tìm được trong MSSV: chẵn/lẻ |
+| custom | Ánh xạ chữ số cuối MSSV tới đề theo cấu hình số dư |
 
-Always access the server via its `http://` URL. Do not open template files directly in the browser.
+IP không chứng minh chỗ ngồi. Hạn do server xác định theo mốc chung và điều chỉnh cá nhân; vào muộn không mặc nhiên được đủ thời lượng mới. Worker tự đóng khi hết hạn. Ép thu bài ngăn nộp tiếp, không lấy file chưa gửi trên máy sinh viên.
 
----
+### Thi lập trình
 
-## 17. Security Notes
+1. Tạo **Thi lập trình**, thêm bài toán, điểm, ngôn ngữ, giới hạn chạy, test mẫu/ẩn.
+2. Nhập test trực tiếp hoặc CSV input,output,sample; xem [file mẫu](static/samples/test-cases.csv). Ô nhiều dòng đặt trong nháy kép; chuỗi `\n` không tự thành xuống dòng.
+3. Mỗi bài phải có test. Cấu hình/test khóa sau khi mở; thí sinh lấy từ thành viên đang hoạt động.
+4. Sinh viên bắt đầu, chọn bài/ngôn ngữ, nộp một file UTF-8: .c, .cpp, .java, .py. Java dùng public class Main, không package.
+5. Lưu nguồn gốc, snapshot đề/test và image ID, trả biên nhận rồi chấm nền. Chấm lại dùng snapshot đã lưu, giữ lịch sử trước.
 
-- **Passwords**: Stored as `scrypt` hashes with per-user salts. Admins cannot read passwords — only reset them.
-- **Sessions**: A random token is placed in an `HttpOnly`, `SameSite=Strict` cookie. Only the SHA-256 hash is stored on disk, so leaking the session file does not directly yield a usable token. Sessions expire after **12 hours**.
-- **Login lockout**: Three consecutive failed attempts for the same account triggers a **15-minute lockout**.
-- **Single active student session**: A student logging in from a second device revokes the previous session.
-- **Origin header**: Not checked on POST endpoints (for Windows/WebView compatibility). Session validation and role checks are still enforced.
-- **HTTP vs. HTTPS**: HTTP is unencrypted. Use TLS if you need to protect credentials and submissions on an untrusted LAN segment.
-- **Monitoring scope**: The server records IP addresses, User-Agents, login events, exam start times, and submission metadata. It does **not** monitor the student's desktop, other applications, keystrokes, or screen.
-- **Upload limit**: 50 MiB per request; ZIP archives are inspected but never extracted to disk.
-- **Data files**: `data/` contains hashed passwords and personal data (names, IPs). Restrict OS-level file system permissions accordingly.
-- **Single process**: Do not run multiple server instances against the same data directory. JSON atomic replacement avoids partial writes within one process but does not protect against concurrent processes.
-- **Public internet (current limitation)**: The server is currently hardened for a trusted LAN. Before deploying to the public internet, CSRF protection must be added to all POST endpoints and per-IP rate limiting must be applied to upload endpoints. See the [Roadmap](#2-roadmap) for the planned work items.
+Chương trình đọc stdin, ghi đáp án stdout, không in lời nhắc. Biên dịch một lần trong container riêng; mỗi test chạy container mới: tắt mạng, user không root, drop capabilities, filesystem gốc chỉ đọc, giới hạn CPU/RAM/process/output. Container chỉ nhận input hiện tại; output mong đợi ở server.
+
+- Checker tokens bỏ khác biệt khoảng trắng giữa token; checker chính xác chuẩn hóa CRLF thành LF nhưng giữ khoảng trắng và xuống dòng cuối.
+- Điểm bài = điểm tối đa × số test AC / tổng test. Test mẫu và ẩn cùng trọng số.
+- Verdict: AC, WA, CE, RE, TLE, MLE, OLE. Lỗi hạ tầng SYSTEM_ERROR có điểm chưa xác định.
+- Sinh viên chỉ xem input/output/stderr test mẫu; test ẩn được lọc cả lịch sử.
+- Hai worker chấm đồng thời. Khi nhận bài mới kiểm tra tối đa 50 bài chờ/đang chấm và hai bài mỗi sinh viên.
+- Bài queued/running được xếp lại khi khởi động. Đóng thi vẫn chấm bài đã nhận.
+
+Xem [programming-judge.md](docs/programming-judge.md). Mô tả cũ về thời lượng/điểm trong tài liệu phụ có chỗ chưa phản ánh backend hiện tại; README dùng quy tắc hạn chung và bảng điểm theo mã nguồn.
+
+### Bảng điểm
+
+Mặc định **chuyên cần 10% + bài tập 10% + giữa kỳ 10% + cuối kỳ 70%**. Đổi được trọng số, tổng phải 100%.
+
+- Chuyên cần từ 10, trừ một mỗi phiên đóng/hết hạn mà sinh viên không Có mặt/Muộn, tối thiểu 0.
+- Bài tập lấy điểm lần nộp mới nhất mỗi bài; quá hạn chưa nộp tính 0. Chưa chấm thì chưa có điểm.
+- Kỳ thi midterm/final tự tham gia thành phần; loại test không tham gia. Thi file lấy điểm lần nộp mới nhất; code lấy điểm tốt nhất từng bài rồi quy về thang 10. Nhiều kỳ thi cùng thành phần lấy trung bình khi đủ điểm.
+- Điểm nhập tay ghi đè tự tính; xóa giá trị ghi đè để dùng lại tự tính.
+- Chỉ có tổng khi đủ thành phần có trọng số lớn hơn 0. Thi còn phát/mở hoặc thiếu điểm thì không tổng kết được.
+- Khóa tổng kết vẫn xem được, chặn sửa/nộp thuộc khóa.
+
+### Dữ liệu trình diễn
+
+Dừng server trước khi chạy CLI. Thêm demo, không thay toàn bộ dữ liệu:
+
+```powershell
+.\.venv\Scripts\python.exe -m app.seed_demo --apply
+```
+
+Thêm DEMO001–DEMO020, mật khẩu ban đầu **111111**, ba khóa, học liệu, lịch, bài tập, điểm danh, thông báo. Có backup và marker tránh trùng, không đổi mật khẩu tài khoản cũ. Xem [DEMO_TEST_GUIDE.md](docs/DEMO_TEST_GUIDE.md).
+
+Thêm ba kỳ thi code thử, cần Docker/image:
+
+```powershell
+.\.venv\Scripts\python.exe -m app.programming_trial --apply
+.\.venv\Scripts\python.exe run_server.py
+```
+
+Tài khoản CHAMTHU01, mật khẩu khởi tạo **ThiThu2026!**. Thêm --draft để tạo nháp khi chưa có bộ chấm. start_trial_exams.bat là lối tắt tạo/mở bộ thử rồi chạy web.
+
+app.reset_demo là công cụ **thay bộ dữ liệu**: --prepare tạo staging, --apply <staging> đưa mẫu vào và chuyển dữ liệu cũ sang backup. Bộ này dùng SV001–SV020, mật khẩu mẫu 111111. Không thuộc cài đặt thông thường; nên dùng bản sao riêng để trình diễn. Mật khẩu mẫu không bảo đảm còn đúng sau khi tài khoản đổi mật khẩu.
+
+## 6. Giao tiếp mạng và API
+
+Dùng **HTTP/1.1 trên TCP**, tùy chọn TLS/HTTPS. Giao diện cập nhật bằng request/polling, không WebSocket/SSE. Backend parse URL-encoded/multipart bằng thư viện chuẩn, trả HTML/JSON/file cùng Content-Length.
+
+```mermaid
+sequenceDiagram
+    participant C as Trình duyệt
+    participant S as Server
+    participant D as JSON và file
+    participant J as Docker worker
+    C->>S: POST /login (username, password)
+    S->>D: Xác thực, tạo phiên
+    S-->>C: 303 và Set-Cookie css_session
+    C->>S: GET /api/student/workspace và Cookie
+    S-->>C: JSON theo quyền
+    C->>S: POST bài nộp multipart và request_id
+    S->>D: Lưu payload, biên nhận
+    S-->>C: JSON biên nhận
+    opt Bài code
+        S->>J: Chấm snapshot
+        J->>D: Lưu kết quả, lịch sử
+        C->>S: GET trạng thái
+        S-->>C: Điểm, kết quả đã lọc test ẩn
+    end
+```
+
+Ví dụ sau đăng nhập:
+
+```http
+POST /api/student/start HTTP/1.1
+Host: 192.168.1.10:8080
+Origin: http://192.168.1.10:8080
+Cookie: css_session=<session-token>
+Content-Type: application/x-www-form-urlencoded
+Content-Length: 14
+
+exam_password=
+```
+
+Thành công trả ok, exam_file, started_at, ends_at, remaining_seconds. Lỗi API dạng `{"detail":"Nội dung lỗi"}`. API ghi chủ yếu nhận **form/multipart**, không JSON body trực tiếp; một số trường form phức tạp chứa chuỗi JSON.
+
+| Method | Endpoint chính | Mục đích |
+| --- | --- | --- |
+| GET | /health | Liveness công khai |
+| POST | /login, /logout | Tạo/hủy phiên |
+| GET | /api/learning, /api/student/workspace | Snapshot học tập |
+| POST | /api/learning/{action} | Khóa, học liệu, lịch, bài tập, điểm danh, điểm |
+| GET | /api/learning/files/{kind}/{id} | Tải file theo quyền |
+| GET | /api/learning/preview/{kind}/{id}, /api/learning/view/{kind}/{id} | Xem trước/PDF |
+| GET/POST tương ứng | /api/learning/export-course, /api/learning/import-course | Chuyển gói khóa JSON |
+| GET | /api/admin/workspace, /api/admin/monitor | Dashboard/giám sát |
+| GET | /api/admin/accounts, /api/admin/exams, /api/admin/server-info | Tài khoản, đề, địa chỉ |
+| POST | /api/admin/accounts/import | Nhập sinh viên |
+| POST | /api/admin/exam-configurations/save, /api/admin/exam-configurations/activate | Lưu/kích hoạt thi |
+| POST | /api/admin/distribute, /api/admin/start-exam, /api/admin/end-exam | Điều khiển thi file |
+| GET | /api/student/exam | Tải đề |
+| POST | /api/student/start, /api/student/submit | Bắt đầu/nộp file |
+| POST | /api/student/programming/start, /api/student/programming/submit | Bắt đầu/nộp code |
+| GET | /api/student/programming/submissions | Code cá nhân |
+| POST | /api/admin/programming/control, /api/admin/programming/rejudge | Mở/đóng/chấm lại |
+| GET | /api/admin/archive/... | Tra cứu/tải/xuất kho bài |
+| POST | /api/admin/archive/grade | Chấm từ kho |
+| GET/POST tương ứng | /api/student/notifications, /api/student/notifications/read | Xem/đánh dấu đọc |
+| POST | /api/student/change-password, /api/student/telemetry | Mật khẩu/hiện diện |
+| GET | /api/admin/readiness | Kiểm tra dữ liệu/file/đĩa/CSS/bộ chấm, cần admin |
+
+Chi tiết route và trường form: [main.py](app/main.py), [learning.py](app/learning.py) và module nghiệp vụ.
+
+### Xác thực, đầu vào và lỗi
+
+- Mật khẩu scrypt có salt; cookie HttpOnly, SameSite=Strict, TTL 12 giờ, Secure khi TLS. Token lưu dạng SHA-256.
+- Ba lần sai trong cửa sổ kiểm soát khóa tạm 15 phút; khóa tài khoản do admin là trạng thái riêng. Có quota nguồn đăng nhập, giới hạn băm đồng thời.
+- Backend kiểm tra vai trò/thành viên/chủ bài; đổi/reset mật khẩu thu hồi phiên sinh viên.
+- Kiểm tra Origin khi có header; Jinja2 autoescape, CSP hạn chế tài nguyên ngoài origin. HTTP mặc định chưa mã hóa.
+- Từ chối Content-Length sai/trùng/quá lớn và Transfer-Encoding chưa hỗ trợ; timeout cho body chậm/thiếu.
+- ZIP kiểm tra chữ ký/CRC/đường dẫn/giới hạn giải nén. Xem trước không chạy code/HTML tải lên.
+- Retry cùng request_id/nội dung trả biên nhận cũ; khác nội dung bị từ chối. Quota chung sáu lượt nộp thành công/60 giây/sinh viên.
+- Lỗi: 400 dữ liệu sai, 401 chưa đăng nhập, 403 thiếu quyền/Origin, 404 thiếu tài nguyên, 408 timeout, 409 xung đột trạng thái/retry, 413 dung lượng, 429 quota/queue, 503 quá tải/bộ chấm.
+
+| Đối tượng | Giới hạn |
+| --- | --- |
+| Request body | 50 MiB gồm multipart; file thi phải chừa overhead form |
+| Học liệu/file bài tập | 20 MiB/file; định dạng theo learning.EXTENSIONS |
+| ZIP | 3.000 mục, tổng dung lượng khai báo giải nén 250 MiB |
+| Xem trước | Văn bản 2 MiB; ZIP chỉ liệt kê, DOCX/PPTX trích chữ |
+| Gói khóa | File nhúng tổng 15 MiB, JSON nhập 24 MiB |
+| Mã nguồn | 1–100.000 byte UTF-8 |
+| Test | Tối đa 100/bài, còn phải thỏa ngân sách khi lưu/mở |
+| Lượt chấm | Ngân sách tổng 300 giây theo code_runner.MAX_JOB_SECONDS |
+| Output/test | stdout 1 MiB, stderr 64 KiB; phần lưu xem bị cắt ngắn |
+
+## 7. Cấu trúc và lưu trữ
+
+```text
+LMS_LAN/
+├── run_server.py                 # Entry point chính
+├── submission_server.py          # Entry point tương thích
+├── setup_windows.bat             # Cài môi trường
+├── start_windows.bat             # Cấu hình admin, chạy web
+├── start_unix.sh                 # Chạy Linux/macOS
+├── start_trial_exams.bat          # Bộ thi thử code
+├── app/                         # Backend và CLI
+├── templates/                   # HTML Jinja2
+├── assets/                      # Đầu vào Tailwind
+├── static/                      # CSS, JS, vendor, CSV mẫu
+├── judge/Dockerfile             # Image bộ chấm
+├── tests/                       # Unit, HTTP, browser, benchmark
+├── docs/                        # Hướng dẫn, audit, report.docx
+├── data/                        # Metadata JSON
+├── de-thi/                      # Đề thi
+├── learning-files/              # Học liệu, đề và bài nộp bài tập
+├── submissions/                 # Bài thi file
+├── programming-submissions/     # Nguồn và snapshot đề/test
+├── judge-work/                  # Chấm tạm
+├── logs/                        # Audit, kết quả đo
+├── backups/                     # Sao lưu
+└── previews/                    # Ảnh/kết quả QA
+```
+
+| Module app/ | Trách nhiệm |
+| --- | --- |
+| main, http, config, runtime | Routing, form, response, cấu hình, worker, lease |
+| security, accounts, setup_admin, configure_admin | Xác thực, nhập tài khoản, bootstrap admin |
+| storage | JSON, cache, khóa, giao dịch, journal, audit |
+| learning, course_grades, course_packages | LMS, điểm danh, bảng điểm, chuyển khóa |
+| exams, exam_catalog, admin_workspace | Phát đề, cấu hình thi, quản trị |
+| submissions, submission_rate, submission_archive | Nhận bài, quota, kho bài |
+| programming, code_runner | Queue, snapshot, Docker, chấm lại |
+| deadlines, maintenance | Đóng hạn, kiểm tra môi trường, backup, phục hồi |
+| notifications | Feed và trạng thái đọc cá nhân |
+| seed_demo, programming_trial, reset_demo | Dữ liệu/kỳ thi trình diễn |
+
+| File dữ liệu trong data/ | Nội dung |
+| --- | --- |
+| students.json, admins.json | Hồ sơ, hash mật khẩu, trạng thái |
+| sessions.json, login_attempts.json, auth_throttle.json | Phiên/kiểm soát đăng nhập |
+| learning.json | Courses, materials, events, assignments, submissions, attendance, grades |
+| settings.json, assignments.json | Thi file hiện hành, đề/hạn theo sinh viên |
+| exam_catalog.json | Cấu hình thi file/code |
+| submissions.json | Biên nhận/lịch sử thi file |
+| programming_submissions.json, programming_attempts.json | Code, lịch sử chấm, phiên làm bài |
+| submission_rate.json | Tần suất nộp |
+| notifications.json, notification_reads.json | Thông báo và trạng thái đọc |
+
+Audit ghi ở logs/audit.jsonl. Liên kết qua course_id, assignment_id, exam_id, student_id, release_id. Không sửa JSON trực tiếp khi server chạy. Gói xuất khóa tái sử dụng nội dung, không thay backup tài khoản, điểm và bài nộp.
+
+## 8. Kiểm thử và kết quả
+
+```powershell
+# Backend; Docker thật mặc định bỏ qua
+.\.venv\Scripts\python.exe -m unittest discover -s tests -p 'test_*.py' -v
+
+# Cú pháp JS, helper UI và unittest Python
+$env:CSS_TEST_PYTHON = (Resolve-Path '.\.venv\Scripts\python.exe').Path
+npm test
+
+# Browser QA headless
+npm run test:browser
+
+# Bật Docker thật khi image sẵn sàng
+$env:CSS_JUDGE_TESTS = '1'
+npm test
+```
+
+Browser QA không thay toàn bộ unittest. Đặt CSS_TEST_CHROME nếu không tìm thấy trình duyệt. Linux/macOS dùng đường dẫn Python/cú pháp biến môi trường tương ứng.
+
+Test bao phủ tài khoản/Origin/ZIP, LMS, thi/điểm, HTTP/body chậm, retry, lỗi ghi/giao dịch, queue, Docker, CSV, QR, phân quyền, mobile và lỗi JavaScript/CSP. Test nghiệp vụ/browser dùng dữ liệu tạm.
+
+### Bằng chứng có sẵn
+
+Đây là artifact đã lưu, **không phải kết quả chạy mới khi viết README**:
+
+- [backend-final-checks.log](logs/backend-final-checks.log): **114 test Python**, kết thúc OK, **87,930 giây**.
+- [backend-final-browser.log](logs/backend-final-browser.log): ghi nhận đạt các luồng giao diện, mobile HTTP login, QR qua đăng nhập, mật khẩu, bài tập/điểm, JavaScript/CSP.
+- [backend-load.json](logs/backend-load.json): **30 sinh viên**, **900 bài lịch sử**, **30 request đồng thời mỗi pha**, loopback, Docker không bận chấm.
+
+| Pha | Request | Lỗi | Trung vị (ms) | P95 (ms) | Cao nhất (ms) |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Workspace | 30 | 0 | 177,8 | 243,8 | 244,3 |
+| Nhận bài tập | 30 | 0 | 515,7 | 854,5 | 877,6 |
+
+Tạo đúng **30 biên nhận mới**. Tái lập:
+
+```powershell
+.\.venv\Scripts\python.exe tests/benchmark_classroom.py --students 30
+```
+
+Benchmark dùng dữ liệu tạm, ghi đè logs/backend-load.json. Loopback/file nhỏ không đại diện upload lớn Wi-Fi hoặc Docker đầy tải. Artifact chưa đủ thông tin phần cứng để suy ra sức chứa mọi phòng máy.
+
+### Đóng góp kỹ thuật
+
+So với phạm vi phát đề/nhận file ban đầu:
+
+| Đóng góp | Bằng chứng mã nguồn |
+| --- | --- |
+| LMS cùng tài khoản và phân quyền khóa | learning.py, course_grades.py, workspace |
+| Phân phối đề xét subnet/IP | exams.distribute_exams |
+| Chấm bất đồng bộ, giới hạn tài nguyên, lọc test ẩn | programming.py, code_runner.py |
+| Phiên bản bài, snapshot đề/image, lịch sử chấm | submissions.py, submission_archive.py, programming.py |
+| Retry chống trùng, journal giao dịch | storage.py, các luồng request_id |
+| Hạn độc lập trình duyệt, backup kiểm chứng | deadlines.py, maintenance.py |
+
+Chưa có đối chứng đủ để kết luận mức tăng hiệu năng so với baseline.
+
+## 9. Sao lưu và phục hồi
+
+Tự backup khoảng 30 giây sau khởi động, sau đó mỗi sáu giờ, giữ bảy bản auto- mới nhất. Backup gồm metadata, học liệu, bài thi file/code và đề, kèm manifest SHA-256/kiểm tra tham chiếu. Không gồm toàn bộ logs/; lưu riêng audit nếu cần.
+
+Dừng server trước CLI check/backup để lấy lease:
+
+```powershell
+.\.venv\Scripts\python.exe -m app.maintenance check
+.\.venv\Scripts\python.exe -m app.maintenance check --execute
+.\.venv\Scripts\python.exe -m app.maintenance backup
+```
+
+--execute chấm thêm Python mẫu. Khi web chạy, admin dùng /api/admin/readiness; /health chỉ là liveness.
+
+Thay đường dẫn mẫu bằng backup thật, phục hồi vào thư mục mới/rỗng:
+
+```powershell
+.\.venv\Scripts\python.exe -m app.maintenance verify '.\backups\manual-<timestamp>-<id>'
+.\.venv\Scripts\python.exe -m app.maintenance restore-copy '.\backups\manual-<timestamp>-<id>' --target '.\restore-drill'
+$env:CSS_DATA_ROOT = (Resolve-Path '.\restore-drill').Path
+$env:CSS_PORT = '8091'
+.\.venv\Scripts\python.exe run_server.py
+```
+
+Phục hồi xóa session/throttle nguồn cũ. Backup demo cũ có thể thiếu manifest nên không mặc nhiên dùng được với maintenance verify. Kiểm tra đủ tài khoản/file/bài/điểm trước khi chuyển bộ dữ liệu.
+
+## 10. Xử lý sự cố
+
+| Hiện tượng | Kiểm tra |
+| --- | --- |
+| Thiếu Jinja2 | Cài requirements bằng đúng Python chạy server |
+| Venv lỗi trên máy khác | Tạo lại, không sao chép venv khác hệ điều hành |
+| Cổng bận | Dừng server cũ hoặc đổi CSS_PORT |
+| Dữ liệu đang dùng | Dừng tiến trình giữ dữ liệu, không xóa lock để vượt lease |
+| Client không truy cập | IP LAN, firewall, cổng, VPN, Wi-Fi isolation |
+| Khóa đăng nhập | Chờ 15 phút hoặc gỡ khóa tạm; kiểm tra riêng khóa tài khoản |
+| Origin sai | Mở đúng URL, kiểm tra Host/scheme/proxy |
+| Không nhận đề | de-thi, thành viên/thí sinh, trạng thái, mật khẩu đề |
+| Camera HTTP LAN lỗi | Chụp/chọn ảnh hoặc HTTPS được tin cậy |
+| Không chấm code | Docker Linux, image, dung lượng, readiness |
+| Chưa có tổng điểm | Bài chưa chấm, trọng số, loại đánh giá, thành phần |
+| Thiếu CSS/icon/QR | Kiểm tra static/vendor, build CSS nếu cần |
+
+## 11. Giới hạn và hướng phát triển
+
+- JSON/khóa trong tiến trình phù hợp một server; chưa hỗ trợ nhiều server cùng ghi. Chương trình ngoài bỏ qua lease có thể phá nhất quán.
+- Giới hạn worker/queue là rào chắn tài nguyên, không cam kết sức chứa 128 sinh viên dưới mọi tải.
+- HTTP mặc định không mã hóa; public deployment cần TLS, proxy và giám sát theo môi trường.
+- Telemetry có thể bị can thiệp, QR có thể chia sẻ; không bảo đảm chống gian lận hoặc xác minh hiện diện vật lý.
+- Chưa có SSO, quyền giảng viên riêng theo khóa, checker số thực/tùy biến, bài code nhiều file.
+- Chính sách mật khẩu import/tự đổi/reset chưa đồng nhất; import chưa bắt buộc đổi lần đầu.
+- Giữ mọi phiên bản/backup tăng dung lượng; kiểm thử phục hồi không thay thử mất điện thật trên mọi filesystem.
+
+Hướng phát triển: database có giao dịch, worker chấm riêng, phân quyền giảng viên, thống nhất vòng đời tài khoản, benchmark LAN kết hợp Docker, tự động hóa đóng gói/kiểm thử.
+
+## 12. Tài liệu và giấy phép
+
+- [SPECIFICATION.md](SPECIFICATION.md): đặc tả; đối chiếu backend khi khác biệt.
+- [student-workspace.md](docs/student-workspace.md): giao diện/quy trình LMS.
+- [programming-judge.md](docs/programming-judge.md): bộ chấm.
+- [DEMO_TEST_GUIDE.md](docs/DEMO_TEST_GUIDE.md): demo bổ sung.
+- [BACKEND_HARDENING_2026-10-29.md](docs/BACKEND_HARDENING_2026-10-29.md): giao dịch/retry/bảo trì và kiểm chứng.
+- [REQUEST_IO_FIX_2026-10-29.md](docs/REQUEST_IO_FIX_2026-10-29.md), [FULL_PROJECT_AUDIT_2026-10-29.md](docs/FULL_PROJECT_AUDIT_2026-10-29.md), [PROJECT_REVIEW_2026-10-29.md](docs/PROJECT_REVIEW_2026-10-29.md): ghi nhận kiểm tra tại thời điểm tương ứng.
+- [report.docx](docs/report.docx): báo cáo hiện có.
+- [Instruction.md](Instruction.md), [Topics.md](Topics.md), [Submission.md](Submission.md): hướng dẫn học phần.
+- [ZXing NOTICE](static/vendor/zxing/NOTICE.txt), các LICENSE cùng thư mục và [Font Awesome LICENSE](static/vendor/fontawesome/LICENSE.txt).
+
+Tên thành viên, MSSV, giảng viên và tỷ lệ đóng góp chưa xác định trong README mẫu ban đầu; cần bổ sung theo thông tin thật của nhóm khi hoàn thiện hồ sơ học phần.
