@@ -6,6 +6,8 @@ Repo chỉ chứa mã nguồn, tài nguyên giao diện và kiểm thử. Tài k
 
 **Chạy nhanh trên Windows:** nhấp đúp [CHAY_WEB_LAN.bat](CHAY_WEB_LAN.bat). Web tự mở và hiện địa chỉ cho các máy cùng LAN; xem [hướng dẫn](docs/CHAY_WEB_LAN.md).
 
+**Dữ liệu mẫu đầy đủ:** sau khi cài môi trường và tạo admin, dừng server rồi chạy `python -m scripts.seed_full_demo_once` (trên Windows có thể dùng `.venv\Scripts\python.exe`). Script tạo 10 tài khoản DEMO (`DEMO001`–`DEMO010`, mật khẩu mẫu `01012005`), 3 khóa học, lịch học cả tuần, 4 kỳ thi mỗi khóa, tài liệu, bài nộp đã chấm và bảng điểm đầy đủ. Nếu khóa `LTM-DEMO` đã có sẵn, script bổ sung điểm cho khóa đó. Chạy lại chỉ kiểm tra dữ liệu, không nhân bản bản ghi. Các điểm chuyên cần, giữa kỳ và cuối kỳ là điểm mẫu nhập tay; dữ liệu runtime vẫn chỉ lưu trên máy chạy và không được đưa lên GitHub.
+
 **Luồng thi hiện tại:** [kiểm tra/chấm thử trước khi mở thi, chờ đúng lịch, sửa thời gian khi đang thi và bản nháp giảng viên](docs/EXAM_WORKFLOWS_2026-10-30.md). [Quy tắc tính điểm theo ngày tham gia khóa học](docs/ENROLLMENT_GRADING_2026-10-30.md).
 
 > **A lightweight, self-hosted Learning Management System (LMS) for exams — designed for classroom LAN use today, with a roadmap toward public web-server hosting.**
