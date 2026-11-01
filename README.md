@@ -357,7 +357,7 @@ Bổ sung bằng chứng cho các cập nhật: `app/exam_schedule.py`, `app/exa
 # 8. Project Structure
 
 ```text
-LMS_LAN/
+Nhom15_LMSLAN_Source/
 ├── run_server.py                 # Entry point chính
 ├── submission_server.py          # Entry point tương thích
 ├── setup_windows.bat             # Cài môi trường
