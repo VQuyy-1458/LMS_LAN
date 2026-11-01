@@ -4,8 +4,6 @@
 
 **Năm học 2026–2027 · Nhóm 15 · Lớp 10**
 
-Tài liệu hướng dẫn, thiết kế và kiểm chứng của đề tài “Thiết kế và xây dựng hệ thống LMS và thi code trên mạng LAN theo mô hình Client–Server”. Nội dung kế thừa README cũ, thông tin nhóm và thực nghiệm từ báo cáo `Nhom15_LMSLAN_Report.docx`; hướng dẫn vận hành được đối chiếu với nhánh `main` đến commit `4ff4494`. Số liệu thực nghiệm được giữ theo nguồn, không coi là lần chạy kiểm thử mới.
-
 ## Mục lục
 
 1. [Project Information](#1-project-information)
